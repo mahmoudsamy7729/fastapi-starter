@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     smtp_host: str = Field(..., env="SMTP_HOST")
     smtp_port: str = Field(..., env="SMTP_PORT")
 
+    #SOCIAL_LOGIN
+    google_client_id: str = Field(..., env="GOOGLE_CLINET_ID")
+    google_client_secret: str = Field(..., env="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(..., env="GOOGLE_REDIRECT_URI")
+
 
     class Config:
         env_file = ".env"

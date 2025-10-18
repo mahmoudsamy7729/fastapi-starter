@@ -6,6 +6,9 @@ from app.auth.exceptions import TokenExcpetions
 
 
 def create_access_token(data: dict) -> str :
+    """
+    Generate JWT access token
+    """
     to_encode = data.copy()
 
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
@@ -20,6 +23,9 @@ def create_access_token(data: dict) -> str :
 
 
 def verify_access_token(token: str) -> dict:
+    """
+    Verify JWT access token
+    """
     try:
         payload = jwt.decode(
             token,
@@ -39,6 +45,9 @@ def verify_access_token(token: str) -> dict:
 
 
 def create_refresh_token(data: dict) -> str :
+    """
+    Generate JWT refresh token
+    """
     to_encode = data.copy()
 
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.refresh_token_expire_minutes)
@@ -53,6 +62,9 @@ def create_refresh_token(data: dict) -> str :
 
 
 def verify_refresh_access_token(refresh_token: str) -> dict:
+    """
+    Verify JWT refresh token
+    """
     if not refresh_token:
         raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
 
@@ -81,6 +93,9 @@ def verify_refresh_access_token(refresh_token: str) -> dict:
 
 
 def create_verifcation_token(data: dict) -> str :
+    """
+    Generate JWT Email Verification - Reset token
+    """
     to_encode = data.copy()
 
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.verification_token_expire_minutes)
@@ -95,6 +110,9 @@ def create_verifcation_token(data: dict) -> str :
 
 
 def verify_verification_token(verification_token: str) -> str:
+    """
+    Verify JWT verification token
+    """
     if not verification_token:
         raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
 
@@ -114,5 +132,31 @@ def verify_verification_token(verification_token: str) -> str:
         raise HTTPException(status_code=400, detail="Verification link expired")
     except JWTError:
         raise HTTPException(status_code=400, detail="Invalid token")
+    
+
+def verify_reset_token(verification_token: str) -> str:
+    """
+    Verify JWT reset token
+    """
+    if not verification_token:
+        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
+    
+    try:
+        payload = jwt.decode(
+            verification_token,
+            settings.verification_secret_key,
+            algorithms=[settings.algorithm],
+        )
+        email: str = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid token")
+
+        return email
+
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Verification link expired")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
 
 
