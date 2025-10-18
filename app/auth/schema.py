@@ -29,3 +29,16 @@ class UserRead(UserBase):
 class UserCreateResponse(BaseModel):
     message: str
     user: UserRead
+
+
+class ForgetPasswordRequest(BaseModel):
+    email: EmailStr = Field (...,  examples=["example@email.com"])
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    password: str
+    new_password: str
