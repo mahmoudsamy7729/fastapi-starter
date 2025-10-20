@@ -43,4 +43,10 @@ class GoogleOAuthService:
             response = await client.get(GOOGLE_USERINFO_URL, headers=headers)
             if response.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to get user info")
+            
+
+            # 👇 Here you can:
+            # 1. Check if user exists in DB by email
+            # 2. Create user if not exists
+            # 3. Generate your own JWT tokens
             return response.json()

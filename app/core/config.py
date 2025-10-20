@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     google_redirect_uri: str = Field(..., env="GOOGLE_REDIRECT_URI")
 
 
+    github_client_id: str = Field(..., env="GITHUB_CLINET_ID")
+    github_client_secret: str = Field(..., env="GITHUB_CLIENT_SECRET")
+    github_redirect_uri: str = Field(..., env="GITHUB_REDIRECT_URI")
+
+
     class Config:
         env_file = ".env"
 
