@@ -1,10 +1,19 @@
 import httpx
-from fastapi import HTTPException, status
+import random
+from uuid import UUID
+from typing import Annotated
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, Depends
+
+from app.core.database import get_db
 from app.core.config import settings
+from app.auth.services.auth_services import UserService
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 class GoogleOAuthService:
     @staticmethod
@@ -37,16 +46,22 @@ class GoogleOAuthService:
             return response.json()
 
     @staticmethod
-    async def get_user_info(access_token: str):
+    async def get_user_info(access_token: str, db: AsyncSession):
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {access_token}"}
             response = await client.get(GOOGLE_USERINFO_URL, headers=headers)
             if response.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to get user info")
             
+            email = response.json().get("email")
+            username = response.json().get("email").replace(" ", "_")+str(random.randint(1000, 9999))
+            
 
             # 👇 Here you can:
-            # 1. Check if user exists in DB by email
-            # 2. Create user if not exists
-            # 3. Generate your own JWT tokens
-            return response.json()
+            user = await UserService.check_user_exist(db, email)
+            if not user:
+                user = await UserService.create_new_user_social_register(db, email, username)
+            
+            tokens = await UserService.generate_tokens_social_login(UUID(str(user)))
+
+            return tokens

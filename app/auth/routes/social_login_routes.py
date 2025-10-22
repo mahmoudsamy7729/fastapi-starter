@@ -1,5 +1,10 @@
-from fastapi import APIRouter, status, Request
+from typing import Annotated
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, status, Request, Depends, Response
 from fastapi.responses import RedirectResponse, JSONResponse
+
+
+from app.core.database import get_db
 from app.auth.services.google_oauth_service import GoogleOAuthService
 from app.auth.services.github_oauth_service import GithubOAuthService
 
@@ -7,6 +12,7 @@ from app.auth.services.github_oauth_service import GithubOAuthService
 
 router = APIRouter(prefix="/auth/social", tags=["Social Auth"])
 
+db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.get("/login/google", status_code=status.HTTP_200_OK)
@@ -17,17 +23,27 @@ async def google_login():
 
 
 @router.get("/callback/google", status_code=status.HTTP_200_OK)
-async def google_callback(request: Request):
+async def google_callback(request: Request, response: Response, db: db_dependency):
     """Handle Google callback and return user info."""
     code = request.query_params.get("code")
     if not code:
         return JSONResponse(status_code=400, content={"detail": "Code not found"})
 
-    tokens = await GoogleOAuthService.get_tokens(code)
-    user_info = await GoogleOAuthService.get_user_info(tokens["access_token"])
+    access_token = await GoogleOAuthService.get_tokens(code)
+    tokens = await GoogleOAuthService.get_user_info(access_token["access_token"], db)
+    response.set_cookie(
+            key="refresh_token",
+            value=tokens['refresh_token'],
+            httponly=True,     
+            secure=False,       
+            samesite="lax",    
+            max_age=7*24*60*60 
+        )
 
-
-    return {"user": user_info, "tokens": tokens}
+    return {
+        "access_token": tokens['access_token'],
+        "token_type": "bearer"
+    }
 
 
 
@@ -39,16 +55,26 @@ async def github_login():
 
 
 @router.get("/callback/github", status_code=status.HTTP_200_OK)
-async def github_callback(request: Request):
+async def github_callback(request: Request, response: Response, db: db_dependency):
     """Handle Google callback and return user info."""
     code = request.query_params.get("code")
     if not code:
         return JSONResponse(status_code=400, content={"detail": "Code not found"})
 
     access_token = await GithubOAuthService.get_tokens(code)
-    user_info = await GithubOAuthService.get_user_info(access_token)
-    
+    tokens = await GithubOAuthService.get_user_info(access_token, db)
+    response.set_cookie(
+            key="refresh_token",
+            value=tokens['refresh_token'],
+            httponly=True,     
+            secure=False,       
+            samesite="lax",    
+            max_age=7*24*60*60 
+        )
 
-    return {"user": user_info, "tokens": access_token}
+    return {
+        "access_token": tokens['access_token'],
+        "token_type": "bearer"
+    }
     
     

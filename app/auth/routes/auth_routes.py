@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, BackgroundTasks, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Annotated
+from typing import Annotated, Union
 
 from app.auth import schema
 from app.auth.sending_emails import get_email_service, EmailService
@@ -20,18 +20,23 @@ user_dependency = Annotated[User, Depends(get_current_user)]
 
 
 @router.post("/register", response_model=schema.UserCreateResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_in: schema.UserCreate, background_tasks: BackgroundTasks, 
-                        email_service: email_service_dependency, db: db_dependency):
+async def register_user(background_tasks: BackgroundTasks, email_service: email_service_dependency, 
+                db: db_dependency, user_in: schema.UserCreate = Depends(schema.as_form),
+                profile_image: Union[UploadFile, None, str] = File(None)):
     """
     Register user to the system 
     """
     try:
         new_user = await UserService.create_user(db, user_in)
+        # 2️⃣ If image was uploaded, store it and update the user record
+        if profile_image:
+            image_path = await UserService.upload_image(profile_image)
+            await UserService.update_user_profile_image(db, new_user.id, image_path)
         email_data = EmailSchema(email=[user_in.email])
         background_tasks.add_task(email_service.send_verification_email, email_data, {"sub": str(new_user.id)})
         return {
             "message": "Account created successfully, Check email to verify your account",
-            "user": new_user 
+            "user": new_user,
         }
     
     except ValueError as e:

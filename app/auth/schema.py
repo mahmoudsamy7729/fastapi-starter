@@ -1,6 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 from pydantic import EmailStr, Field, BaseModel
+from fastapi import  Form
+from typing import Optional
 
 
 class UserBase(BaseModel):
@@ -10,7 +12,15 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=72, examples=["strongpassword123"])
+    password: str = Field(...,min_length=8, max_length=72, examples=["strongpassword123"])
+    
+def as_form(
+    email: EmailStr = Form(...),
+    username: str = Form(...),
+    password: str = Form(...)
+) -> UserCreate:
+    return UserCreate(email=email, username=username, password=password)
+
 
 
 class UserLogin(BaseModel):
@@ -20,6 +30,7 @@ class UserLogin(BaseModel):
 
 class UserRead(UserBase):
     id: UUID
+    profile_image: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

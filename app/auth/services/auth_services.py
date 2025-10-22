@@ -1,8 +1,12 @@
 import secrets
+import os
+from pathlib import Path
+import uuid
+from uuid import UUID
 from datetime import datetime, timedelta, UTC
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, insert, desc
-from fastapi import HTTPException, status, Request
+from fastapi import HTTPException, status, Request, UploadFile, File
 
 from app.auth import models, schema
 from app.core.security import hash_password
@@ -10,25 +14,49 @@ from app.core.security import verify_password
 from app.core.jwt_handler import create_access_token, create_refresh_token, verify_refresh_access_token, verify_verification_token, verify_reset_token
 
 
+# Folder to save uploaded images
+UPLOAD_DIR = Path("uploads/images")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 class UserService:
+    @staticmethod
+    async def upload_image(image: UploadFile = File(...)):
+         # 1. Validate file type (optional)
+        if not image.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="File must be an image.")
+        
+        file_extension = image.filename.split(".")[-1]
+        unique_name = f"{uuid.uuid4()}.{file_extension}"
+        file_location = UPLOAD_DIR / unique_name
+
+        
+        with open(file_location, "wb") as buffer:
+            buffer.write(await image.read())
+
+        return unique_name
+
+    
     @staticmethod
     async def create_user(db: AsyncSession, user_in: schema.UserCreate):
         """
         Create user and save to the DB
         """
-        result = await db.execute(select(models.User).where(
-            or_(models.User.email == user_in.email), (models.User.username == user_in.username))
+        result = await db.execute(
+            select(models.User).where(
+                or_(models.User.email == user_in.email, models.User.username == user_in.username)
             )
+        )
         existing_user = result.scalar_one_or_none()
         if existing_user:
             raise ValueError("Email or username already registered")
+        
         
         hashed_pw = hash_password(user_in.password)
 
         new_user = models.User(
             email=user_in.email,
             username=user_in.username,
-            hashed_password=hashed_pw
+            hashed_password=hashed_pw,
         )
 
         db.add(new_user)
@@ -36,6 +64,50 @@ class UserService:
         await db.refresh(new_user)
         return new_user
     
+    
+    
+    @staticmethod
+    async def update_user_profile_image(db, user_id: str, image_path: str):
+        user = await db.get(models.User, user_id)
+        if not user:
+            raise ValueError("User not found")
+        user.profile_image = image_path
+        await db.commit()
+        await db.refresh(user)
+
+
+    @staticmethod
+    async def check_user_exist(db: AsyncSession, email: str):
+        result = await db.execute(select(models.User.id).where(models.User.email == email))
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+        return False
+    
+
+    @staticmethod
+    async def create_new_user_social_register(db: AsyncSession, email: str, username: str):
+        new_user = models.User(
+            email=email,
+            username=username,
+        )
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        return new_user.id
+    
+    @staticmethod
+    async def generate_tokens_social_login(user_id: UUID):
+        access_token = create_access_token({"sub": str(user_id)})
+        refresh_token = create_refresh_token({"sub": str(user_id)})
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token
+        }
+
+
+
     @staticmethod
     async def authenticate_user(user_in: schema.UserLogin, db: AsyncSession):
         """Verify user credentials."""
@@ -123,7 +195,6 @@ class UserService:
 
         hashed_pw = hash_password(request.new_password)
         user.hashed_password = hashed_pw
-        db.add(user)
         await db.commit()
         return {"message": "Password reset successful. You can now log in."}
     
@@ -138,7 +209,6 @@ class UserService:
             raise HTTPException(status_code=404, detail="Old password isn't correct")
         hashed_pw = hash_password(request.new_password)
         user.hashed_password = hashed_pw
-        db.add(user)
         await db.commit()
         return {"message": "Password changed successfully. You can now log in."}
     
