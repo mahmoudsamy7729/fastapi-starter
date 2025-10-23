@@ -3,7 +3,7 @@ import random
 from uuid import UUID
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, status
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -41,8 +41,8 @@ class GoogleOAuthService:
                 "grant_type": "authorization_code",
             }
             response = await client.post(GOOGLE_TOKEN_URL, data=data)
-            if response.status_code != 200:
-                raise HTTPException(status_code=400, detail="Failed to get tokens")
+            if response.status_code != status.HTTP_200_OK:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to get tokens")
             return response.json()
 
     @staticmethod
@@ -50,11 +50,11 @@ class GoogleOAuthService:
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {access_token}"}
             response = await client.get(GOOGLE_USERINFO_URL, headers=headers)
-            if response.status_code != 200:
-                raise HTTPException(status_code=400, detail="Failed to get user info")
+            if response.status_code != status.HTTP_200_OK:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to get user info")
             
             email = response.json().get("email")
-            username = response.json().get("email").replace(" ", "_")+str(random.randint(1000, 9999))
+            username = response.json().get("name").replace(" ", "_")+str(random.randint(1000, 9999))
             
 
             # 👇 Here you can:

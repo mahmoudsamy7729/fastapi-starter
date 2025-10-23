@@ -11,7 +11,9 @@ from fastapi import HTTPException, status, Request, UploadFile, File
 from app.auth import models, schema
 from app.core.security import hash_password
 from app.core.security import verify_password
-from app.core.jwt_handler import create_access_token, create_refresh_token, verify_refresh_access_token, verify_verification_token, verify_reset_token
+from app.core.jwt_handler import (create_access_token, create_refresh_token,
+                                verify_refresh_access_token, verify_verification_token,
+                                verify_reset_token)
 
 
 # Folder to save uploaded images
@@ -170,7 +172,7 @@ class UserService:
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         if user.is_verified:
             return {"message": "Email already verified"}
@@ -191,7 +193,7 @@ class UserService:
         user = result.scalar_one_or_none()
 
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         hashed_pw = hash_password(request.new_password)
         user.hashed_password = hashed_pw
@@ -204,9 +206,9 @@ class UserService:
         result = await db.execute(select(models.User).where(models.User.email == current_user.email))  
         user = result.scalar_one_or_none()
         if not user :
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         if not verify_password(request.password, user.hashed_password):
-            raise HTTPException(status_code=404, detail="Old password isn't correct")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Old password isn't correct")
         hashed_pw = hash_password(request.new_password)
         user.hashed_password = hashed_pw
         await db.commit()
@@ -218,7 +220,7 @@ class UserService:
         result = await db.execute(select(models.User).where(models.User.email == request.email)) 
         user = result.scalar_one_or_none()
         if not user :
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
         
         code = f"{secrets.randbelow(1000000):06}"
         hashed_code = hash_password(code)
@@ -237,7 +239,7 @@ class UserService:
         result = await db.execute(select(models.User.id).where(models.User.email == email)) 
         user_id = result.scalar_one_or_none()
         if not user_id :
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
         
         result = await db.execute(
         select(models.LoginCode).where(models.LoginCode.user_id == user_id).order_by(desc(models.LoginCode.created_at))
@@ -245,15 +247,15 @@ class UserService:
         )
         login_code = result.scalar_one_or_none()
         if not login_code:
-            raise HTTPException(status_code=400, detail="No code found or expired")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No code found or expired")
         
         if login_code.expires_at < datetime.now(UTC):
             await db.delete(login_code)
             await db.commit()
-            raise HTTPException(status_code=400, detail="Code expired")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code expired")
         
         if not verify_password(code, login_code.code_hash):
-            raise HTTPException(status_code=400, detail="Invalid code")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
         
         await db.delete(login_code)
         await db.commit()

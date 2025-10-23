@@ -1,5 +1,6 @@
 from fastapi_mail import FastMail, MessageSchema, MessageType
 from app.core.mail import conf, EmailSchema
+from app.core.config import settings
 from app.core.jwt_handler import create_verifcation_token
 
 
@@ -10,7 +11,7 @@ class EmailService:
         Send verification email after user registers
         """
         verifcation_token = create_verifcation_token(user_id)
-        verify_url = f"http://localhost:8000/auth/verify-email?token={verifcation_token}"
+        verify_url = f"{settings.app_url}/auth/verify-email?token={verifcation_token}"
         message = MessageSchema(
             subject="Email Verification",
             recipients=email.email,  # list of recipients
@@ -26,11 +27,11 @@ class EmailService:
         Send password reset link when user forget their password
         """
         verifcation_token = create_verifcation_token(user_email)
-        verify_url = f"http://localhost:8000/auth/password-reset?token={verifcation_token}"
+        verify_url = f"{settings.app_url}/auth/password-reset?token={verifcation_token}"
         message = MessageSchema(
-            subject="Email Verification",
+            subject="Password Reset",
             recipients=email.email,  # list of recipients
-            body=f"Click the link to verify your email: {verify_url}",
+            body=f"Click the link to reset your password: {verify_url}",
             subtype=MessageType.plain  # or "plain"
         )
 
@@ -43,7 +44,7 @@ class EmailService:
         Send Login Code to be used once expiry date is after 15 min
         """
         message = MessageSchema(
-            subject="Email Verification",
+            subject="Login Code",
             recipients=email.email,  # list of recipients
             body=f"Enter the code {code}",
             subtype=MessageType.plain  # or "plain"

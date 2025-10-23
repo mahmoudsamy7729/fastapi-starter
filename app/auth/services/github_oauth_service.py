@@ -1,5 +1,5 @@
 import httpx
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 from uuid import UUID
@@ -48,7 +48,7 @@ class GithubOAuthService:
             token_data = token_res.json()
             access_token = token_data.get("access_token")
             if not access_token:
-                raise HTTPException(status_code=400, detail="GitHub token exchange failed")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub token exchange failed")
             return access_token
 
     @staticmethod
@@ -57,7 +57,7 @@ class GithubOAuthService:
             headers = {"Authorization": f"Bearer {access_token}"}
             response = await client.get(GITHUB_USER_API, headers=headers)
             if response.status_code != 200:
-                raise HTTPException(status_code=400, detail="Failed to get user info")
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to get user info")
             email_res = await client.get(GITHUB_EMAILS, headers=headers)
             emails = email_res.json()
             primary_email = next((e["email"] for e in emails if e["primary"]), None)

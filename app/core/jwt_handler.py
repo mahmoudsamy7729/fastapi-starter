@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import status, HTTPException
 from app.core.config import settings
-from app.auth.exceptions import TokenExcpetions
+from app.auth.utils.exceptions import TokenExcpetions
 
 
 def create_access_token(data: dict) -> str :

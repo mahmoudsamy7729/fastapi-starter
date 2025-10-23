@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "FastAPI Auth System"
     app_env: str = "development"
     app_debug: bool = True
+    app_url: str = Field(..., env="APP_URL")
 
     # Database
     database_url: str = Field(..., env="DATABASE_URL")

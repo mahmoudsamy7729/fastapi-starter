@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated, Union
 
 from app.auth import schema
-from app.auth.sending_emails import get_email_service, EmailService
+from app.auth.utils.responses import auth_response
+from app.auth.services.email import get_email_service, EmailService
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.mail import EmailSchema
@@ -66,21 +67,10 @@ async def login(user_in: schema.UserLogin, response: Response, db: db_dependency
     User Login (Email , Password)
     """
     tokens =  await UserService.login_user(user_in, db)
-    response.set_cookie(
-            key="refresh_token",
-            value=tokens['refresh_token'],
-            httponly=True,     
-            secure=False,       
-            samesite="lax",    
-            max_age=7*24*60*60 
-        )
-    return {
-        "access_token": tokens['access_token'],
-        "token_type": "bearer"
-    }
+    return auth_response(response, tokens['access_token'], tokens['refresh_token'])
 
 
-@router.post("/login-code-request", status_code=status.HTTP_200_OK)
+@router.post("/login/code/request", status_code=status.HTTP_200_OK)
 async def request_login_code(request: schema.ForgetPasswordRequest, background_taks: BackgroundTasks, email_service: email_service_dependency, db: db_dependency):
     """
     Request Code to login with (one time use)
@@ -100,25 +90,14 @@ async def request_login_code(request: schema.ForgetPasswordRequest, background_t
     
 
 
-@router.post("/login-code", status_code=status.HTTP_200_OK)
+@router.post("/login/code/verify", status_code=status.HTTP_200_OK)
 async def login_with_code(email: str, code: str, response: Response, db: db_dependency):
     """
     User Login with code (Single time use)
     """
     try:
         tokens = await UserService.verify_login_code(email, code, db)
-        response.set_cookie(
-            key="refresh_token",
-            value=tokens['refresh_token'],
-            httponly=True,     
-            secure=False,       
-            samesite="lax",    
-            max_age=7*24*60*60 
-        )
-        return {
-            "access_token": tokens['access_token'],
-            "token_type": "bearer"
-        }
+        return auth_response(response, tokens['access_token'], tokens['refresh_token'])
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,27 +105,16 @@ async def login_with_code(email: str, code: str, response: Response, db: db_depe
         )
     
 
-@router.post("/refresh", status_code=status.HTTP_200_OK)
+@router.post("/token/refresh", status_code=status.HTTP_200_OK)
 async def refresh_token(request: Request, response: Response):
     """
     Refresh access token frontend should hit this endpoint every x min to keep the user logged in
     """
     tokens =  await UserService.refresh_token(request)
-    response.set_cookie(
-            key="refresh_token",
-            value=tokens['refresh_token'],
-            httponly=True,     
-            secure=False,       
-            samesite="lax",    
-            max_age=7*24*60*60 
-        )
-    return {
-        "access_token": tokens['access_token'],
-        "token_type": "bearer"
-    }
+    return auth_response(response, tokens['access_token'], tokens['refresh_token'])
 
     
-@router.post("/forget-password", status_code=status.HTTP_200_OK)
+@router.post("/password/forgot", status_code=status.HTTP_200_OK)
 async def forget_password(request: schema.ForgetPasswordRequest, background_taks: BackgroundTasks, email_service: email_service_dependency):
     """
     Send link with the token to reset password when user forgets their password
@@ -158,7 +126,7 @@ async def forget_password(request: schema.ForgetPasswordRequest, background_taks
     }
 
 
-@router.post("/password-reset", status_code=status.HTTP_200_OK)
+@router.post("/password/reset", status_code=status.HTTP_200_OK)
 async def password_reset(token: str, request: schema.ResetPasswordRequest, db: db_dependency):
     """
     Reset Password when User forget their passowrd 
@@ -172,7 +140,7 @@ async def password_reset(token: str, request: schema.ResetPasswordRequest, db: d
             detail=str(e)
         )
     
-@router.post("/password-change", status_code=status.HTTP_200_OK)
+@router.post("/password/change", status_code=status.HTTP_200_OK)
 async def password_change( request: schema.ChangePasswordRequest, current_user: user_dependency ,db: db_dependency):
     """
     Change Password comapre old password and change it 
