@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from app.auth.routes.auth_routes import router as auth_router
-from app.auth.routes.social_login_routes import router as social_router
-from app.auth.routes.user_routes import router as user_router
+from app.auth.routes.auth import router as auth_router
+from app.auth.routes.social import router as social_router
+from app.auth.routes.users import router as user_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.setup_middlewares import setup_middlewares
 from contextlib import asynccontextmanager
