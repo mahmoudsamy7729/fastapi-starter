@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi_mail import FastMail, MessageSchema, MessageType
 from app.core.mail import conf, EmailSchema
 from app.core.config import settings
@@ -15,13 +16,17 @@ class EmailService:
         message = MessageSchema(
             subject="Email Verification",
             recipients=email.email,  # list of recipients
-            body=f"Click the link to verify your email: {verify_url}",
-            subtype=MessageType.plain  # or "plain"
+            template_body={
+                "app_name": settings.app_name, "expires_in": settings.verification_token_expire_minutes,
+                "app_url": settings.app_url, "verification_url": verify_url,
+                "support_email": "support@fast_api.com", "company_address": "1234 Street, City, Country",
+                "year": datetime.now().year
+                },
+            subtype=MessageType.html
         )
 
         fm = FastMail(conf)
-        await fm.send_message(message)
-
+        await fm.send_message(message, template_name="verify_email.html")
     async def send_password_reset_email(self, email: EmailSchema, user_email):
         """
         Send password reset link when user forget their password
@@ -31,12 +36,17 @@ class EmailService:
         message = MessageSchema(
             subject="Password Reset",
             recipients=email.email,  # list of recipients
-            body=f"Click the link to reset your password: {verify_url}",
-            subtype=MessageType.plain  # or "plain"
+            template_body={
+                "app_name": settings.app_name, "expires_in": settings.verification_token_expire_minutes,
+                "app_url": settings.app_url, "reset_url": verify_url,
+                "support_email": "support@fast_api.com", "company_address": "1234 Street, City, Country",
+                "year": datetime.now().year
+                },
+            subtype=MessageType.html
         )
 
         fm = FastMail(conf)
-        await fm.send_message(message)
+        await fm.send_message(message, template_name="reset_password.html")
 
 
     async def send_login_code(self, email: EmailSchema, code):
@@ -46,12 +56,17 @@ class EmailService:
         message = MessageSchema(
             subject="Login Code",
             recipients=email.email,  # list of recipients
-            body=f"Enter the code {code}",
-            subtype=MessageType.plain  # or "plain"
+           template_body={
+                "app_name": settings.app_name, "expires_in": settings.verification_token_expire_minutes,
+                "app_url": settings.app_url, "otp_code": code,
+                "support_email": "support@fast_api.com", "company_address": "1234 Street, City, Country",
+                "year": datetime.now().year
+                },
+            subtype=MessageType.html
         )
 
         fm = FastMail(conf)
-        await fm.send_message(message)
+        await fm.send_message(message, template_name="otp.html")
 
 async def get_email_service():
     return EmailService()

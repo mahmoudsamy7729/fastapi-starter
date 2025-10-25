@@ -25,12 +25,11 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Replace "*" with your frontend URL in production
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # or ["POST", "OPTIONS"]
+    allow_headers=["*"],  # or ["Content-Type", "Authorization"]
 )
-
 
 app.include_router(auth_router)
 app.include_router(social_router)
