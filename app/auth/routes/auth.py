@@ -45,6 +45,7 @@ async def register_user(background_tasks: BackgroundTasks, email_service: email_
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+  
     
 @router.get("/verify-email", status_code=status.HTTP_200_OK)
 async def verify_email(token: str, db: db_dependency):
@@ -71,7 +72,8 @@ async def login(user_in: schema.UserLogin, response: Response, db: db_dependency
 
 
 @router.post("/login/code/request", status_code=status.HTTP_200_OK)
-async def request_login_code(request: schema.ForgetPasswordRequest, background_taks: BackgroundTasks, email_service: email_service_dependency, db: db_dependency):
+async def request_login_code(request: schema.ForgetPasswordRequest, background_taks: BackgroundTasks, 
+                             email_service: email_service_dependency, db: db_dependency):
     """
     Request Code to login with (one time use)
     """
@@ -88,7 +90,6 @@ async def request_login_code(request: schema.ForgetPasswordRequest, background_t
             detail=str(e)
         )
     
-
 
 @router.post("/login/code/verify", status_code=status.HTTP_200_OK)
 async def login_with_code(email: str, code: str, response: Response, db: db_dependency):
@@ -115,7 +116,8 @@ async def refresh_token(request: Request, response: Response):
 
     
 @router.post("/password/forgot", status_code=status.HTTP_200_OK)
-async def forget_password(request: schema.ForgetPasswordRequest, background_taks: BackgroundTasks, email_service: email_service_dependency):
+async def forget_password(request: schema.ForgetPasswordRequest, 
+                          background_taks: BackgroundTasks, email_service: email_service_dependency):
     """
     Send link with the token to reset password when user forgets their password
     """
@@ -139,9 +141,11 @@ async def password_reset(token: str, request: schema.ResetPasswordRequest, db: d
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    
+
+
 @router.post("/password/change", status_code=status.HTTP_200_OK)
-async def password_change( request: schema.ChangePasswordRequest, current_user: user_dependency ,db: db_dependency):
+async def password_change( request: schema.ChangePasswordRequest, 
+                          current_user: user_dependency ,db: db_dependency):
     """
     Change Password comapre old password and change it 
     """

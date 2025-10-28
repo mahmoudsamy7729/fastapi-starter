@@ -9,6 +9,7 @@ class UserBase(BaseModel):
     email: EmailStr = Field (...,  examples=["example@email.com"])
     username: str = Field(..., examples=["example_username"])
     is_active: bool = True
+    is_verified: bool = False
 
 
 class UserCreate(UserBase):

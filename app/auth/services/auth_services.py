@@ -208,7 +208,7 @@ class UserService:
         if not user :
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         if not verify_password(request.password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Old password isn't correct")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old password isn't correct.")
         hashed_pw = hash_password(request.new_password)
         user.hashed_password = hashed_pw
         await db.commit()
