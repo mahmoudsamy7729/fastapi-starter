@@ -26,8 +26,8 @@ async def protected_route(current_user: user_dependency):
     return {"message": f"Hello {current_user.username}!"}
 
 
-@router.post("/api/chat")
-async def proxy_chat(request: Request):
+# @router.post("/api/chat")
+# async def proxy_chat(request: Request):
     host = request.headers.get("host")
     if host != "http://localhost:3000":
         raise HTTPException(status_code=403, detail="Forbidden origin")

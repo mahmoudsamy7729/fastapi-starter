@@ -37,3 +37,5 @@ def override_dependencies():
 async def client(init_db):
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
+
+

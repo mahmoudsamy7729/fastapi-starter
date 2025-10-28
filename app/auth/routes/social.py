@@ -35,7 +35,6 @@ async def google_callback(request: Request, response: Response, db: db_dependenc
     return auth_response(response, tokens['access_token'], tokens['refresh_token'])
 
 
-
 @router.get("/login/github/start", status_code=status.HTTP_200_OK)
 async def github_login():
     """Redirect user to Google OAuth login."""
