@@ -72,7 +72,7 @@ jobs:
           # Mail (dummy values)
           echo "SMTP_HOST=localhost" >> .env
           echo "SMTP_PORT=1025" >> .env
-          echo "SMTP_USER=user" >> .env
+          echo "SMTP_USER=user@gmail.com" >> .env
           echo "SMTP_PASSWORD=pass" >> .env
 
           # Social login (dummy values)
