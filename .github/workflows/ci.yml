@@ -94,8 +94,7 @@ jobs:
       - name: Run tests
         env:
           ENV: test
-        run: pytest -q --maxfail=1 --disable-warnings --cov=.
-
+        run: pytest -q --maxfail=1 --disable-warnings 
       - name: Upload coverage HTML
         if: always()
         uses: actions/upload-artifact@v4
