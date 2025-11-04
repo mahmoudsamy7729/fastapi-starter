@@ -8,8 +8,6 @@ from typing import Optional
 class UserBase(BaseModel):
     email: EmailStr = Field (...,  examples=["example@email.com"])
     username: str = Field(..., examples=["example_username"])
-    is_active: bool = True
-    is_verified: bool = False
 
 
 class UserCreate(UserBase):
@@ -23,11 +21,14 @@ def as_form(
     return UserCreate(email=email, username=username, password=password)
 
 
-
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+
+class UserLoginWithCode(BaseModel):
+    email: EmailStr
+    code: str
 
 class UserRead(UserBase):
     id: UUID

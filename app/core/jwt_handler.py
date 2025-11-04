@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError, ExpiredSignatureError
-from fastapi import status, HTTPException
 from app.core.config import settings
-from app.auth.utils.exceptions import TokenExcpetions
+from app.auth.utils.exceptions import TokenExceptions
 
 
 def create_access_token(data: dict) -> str :
@@ -10,16 +9,11 @@ def create_access_token(data: dict) -> str :
     Generate JWT access token
     """
     to_encode = data.copy()
-
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    issued_at = datetime.now(timezone.utc)
+    to_encode.update({"exp": expire, "iat": issued_at})
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.secret_key,
-        algorithm=settings.algorithm
-    )
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
 def verify_access_token(token: str) -> dict:
@@ -27,21 +21,18 @@ def verify_access_token(token: str) -> dict:
     Verify JWT access token
     """
     try:
-        payload = jwt.decode(
-            token,
-            settings.secret_key,
-            algorithms=[settings.algorithm]
-        )
-
-        # Extract subject (user ID)
-        user_id: str = payload.get("sub")
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id: str = payload.get('sub')
         if user_id is None:
-            raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Could not validate access token")
-
+            raise TokenExceptions.invalid_payload()
+        
         return payload
 
+    except ExpiredSignatureError:
+        raise TokenExceptions.expired_token()
+    
     except JWTError:
-        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Could not validate access token")
+        raise TokenExceptions.token_exception()
 
 
 def create_refresh_token(data: dict) -> str :
@@ -51,45 +42,43 @@ def create_refresh_token(data: dict) -> str :
     to_encode = data.copy()
 
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.refresh_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    issued_at = datetime.now(timezone.utc)
+    to_encode.update({"exp": expire, "iat": issued_at})
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.refresh_secret_key,
-        algorithm=settings.algorithm
-    )
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.refresh_secret_key,algorithm=settings.algorithm)
 
 
-def verify_refresh_access_token(refresh_token: str) -> dict:
+def verify_refresh_token(refresh_token: str) -> dict:
     """
     Verify JWT refresh token
     """
     if not refresh_token:
-        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
+        raise TokenExceptions.token_is_missing()
 
     try:
-        payload = jwt.decode(
-            refresh_token,
-            settings.refresh_secret_key,
-            algorithms=[settings.algorithm]
-        )
-
-        # Extract subject (user ID)
+        payload = jwt.decode(refresh_token, settings.refresh_secret_key, algorithms=[settings.algorithm])
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Could not validate refresh token")
+            raise TokenExceptions.invalid_payload()
         
-        access_token = create_access_token({"sub": str(user_id)})
-        new_refresh_token = create_refresh_token({"sub": str(user_id)})
+        data = {
+            "sub": payload.get("sub"),
+            "email": payload.get("email"),
+            "username": payload.get("username")
+        }
+        access_token = create_access_token(data)
+        new_refresh_token = create_refresh_token(data)
         
         return {
             "access_token": access_token,
-            "new_refresh_token": new_refresh_token
+            "refresh_token": new_refresh_token
         }
+    
+    except ExpiredSignatureError:
+        raise TokenExceptions.expired_token()
 
     except JWTError:
-        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Could not validate refresh token")
+        raise TokenExceptions.token_exception()
 
 
 def create_verifcation_token(data: dict) -> str :
@@ -99,13 +88,10 @@ def create_verifcation_token(data: dict) -> str :
     to_encode = data.copy()
 
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.verification_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    issued_at = datetime.now(timezone.utc)
+    to_encode.update({"exp": expire, "iat": issued_at})
 
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.verification_secret_key,
-        algorithm=settings.algorithm
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.verification_secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
 
@@ -114,24 +100,20 @@ def verify_verification_token(verification_token: str) -> str:
     Verify JWT verification token
     """
     if not verification_token:
-        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
+        raise TokenExceptions.token_is_missing()
 
     try:
-        payload = jwt.decode(
-            verification_token,
-            settings.verification_secret_key,
-            algorithms=[settings.algorithm],
-        )
-        user_id: str = payload.get("sub")
+        payload = jwt.decode(verification_token, settings.verification_secret_key, algorithms=[settings.algorithm],)
+        user_id: str = payload.get('sub')
         if not user_id:
-            raise HTTPException(status_code=400, detail="Invalid token")
+            raise TokenExceptions.invalid_payload()
 
         return user_id
 
     except ExpiredSignatureError:
-        raise HTTPException(status_code=400, detail="Verification link expired")
+        raise TokenExceptions.expired_token()
     except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid token")
+        raise TokenExceptions.token_exception()
     
 
 def verify_reset_token(verification_token: str) -> str:
@@ -139,24 +121,21 @@ def verify_reset_token(verification_token: str) -> str:
     Verify JWT reset token
     """
     if not verification_token:
-        raise TokenExcpetions.token_excep(status.HTTP_401_UNAUTHORIZED, "Token is missing")
+        raise TokenExceptions.token_is_missing()
     
     try:
-        payload = jwt.decode(
-            verification_token,
-            settings.verification_secret_key,
-            algorithms=[settings.algorithm],
-        )
-        email: str = payload.get("sub")
+        payload = jwt.decode(verification_token, settings.verification_secret_key, algorithms=[settings.algorithm],)
+        print(payload)
+        email: str = payload.get('sub')
         if not email:
-            raise HTTPException(status_code=400, detail="Invalid token")
+            raise TokenExceptions.invalid_payload()
 
         return email
 
     except ExpiredSignatureError:
-        raise HTTPException(status_code=400, detail="Verification link expired")
+        raise TokenExceptions.expired_token()
     except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid token")
+        raise TokenExceptions.token_exception()
 
 
 

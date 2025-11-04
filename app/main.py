@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.auth.routes.auth import router as auth_router
 from app.auth.routes.social import router as social_router
-from app.auth.routes.users import router as user_router
+from app.users.routes.users import router as users_router
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.setup_middlewares import setup_middlewares
 from contextlib import asynccontextmanager
@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
     print("Shutdown logic here")
 
 app = FastAPI(lifespan=lifespan)
-setup_middlewares(app)
+#setup_middlewares(app)
 
 origins = [
     "http://localhost:3000",  # if you have a React/Vue frontend
@@ -33,4 +33,4 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(social_router)
-app.include_router(user_router)
+app.include_router(users_router)

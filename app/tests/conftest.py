@@ -9,7 +9,7 @@ from sqlalchemy.pool import NullPool
 
 
 # Test DB engine & session
-test_engine = create_async_engine(settings.test_database_url, echo=True,  poolclass=NullPool)
+test_engine = create_async_engine(settings.test_database_url, poolclass=NullPool)
 TestSessionDB = sessionmaker(bind=test_engine, class_=AsyncSession, autoflush=False, autocommit=False)
 
 @pytest.fixture(scope="session", autouse=True)
