@@ -35,6 +35,10 @@ def override_dependencies():
 
 @pytest.fixture
 async def client(init_db):
+    # ✅ Disable SlowAPI rate limiting during tests
+    if hasattr(app.state, "limiter"):
+        app.state.limiter.enabled = False
+
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 
