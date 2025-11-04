@@ -48,7 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-            - name: Prepare environment file
+      - name: Prepare environment file
         run: |
           cp .env.example .env
           echo "APP_NAME=FastAPI-Test" >> .env
