@@ -1,7 +1,7 @@
 import pytest
-from app.auth.models import User
+from app.users.models import User
 from app.tests.conftest import TestSessionDB
-from app.auth.services.auth_services import UserService  # your service to create users
+from app.auth.services.auth_services import AuthService  # your service to create users
 from app.auth import schema
 
 @pytest.fixture
@@ -17,7 +17,7 @@ async def verified_user():
         )
 
         # 2️⃣ Create the user
-        user = await UserService.create_user(db, user_data)
+        user = await AuthService.create_user(db, user_data)
 
         # 3️⃣ Mark user as verified
         user.is_verified = True
@@ -39,6 +39,7 @@ async def logged_in_user(client, verified_user):
     })
     assert response.status_code == 200
     token = response.json()["access_token"]
+    refresh_token = response.cookies.get("refresh_token")
 
-    return {"user": verified_user, "token": token}
+    return {"user": verified_user, "token": token, "refresh_token": refresh_token}
 

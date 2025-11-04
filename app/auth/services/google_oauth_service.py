@@ -7,11 +7,8 @@ from fastapi import HTTPException, Depends, status
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.auth.services.auth_services import UserService
+from app.auth.services.auth_services import AuthService
 
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
@@ -28,7 +25,7 @@ class GoogleOAuthService:
         }
 
         query = "&".join([f"{key}={value}" for key, value in params.items()])
-        return f"{GOOGLE_AUTH_URL}?{query}"
+        return f"{settings.google_auth_url}?{query}"
 
     @staticmethod
     async def get_tokens(code: str):
@@ -40,7 +37,7 @@ class GoogleOAuthService:
                 "redirect_uri": settings.google_redirect_uri,
                 "grant_type": "authorization_code",
             }
-            response = await client.post(GOOGLE_TOKEN_URL, data=data)
+            response = await client.post(settings.google_token_url, data=data)
             if response.status_code != status.HTTP_200_OK:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to get tokens")
             return response.json()
@@ -49,7 +46,7 @@ class GoogleOAuthService:
     async def get_user_info(access_token: str, db: AsyncSession):
         async with httpx.AsyncClient() as client:
             headers = {"Authorization": f"Bearer {access_token}"}
-            response = await client.get(GOOGLE_USERINFO_URL, headers=headers)
+            response = await client.get(settings.google_userinfo_url, headers=headers)
             if response.status_code != status.HTTP_200_OK:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to get user info")
             
@@ -58,10 +55,10 @@ class GoogleOAuthService:
             
 
             # 👇 Here you can:
-            user = await UserService.check_user_exist(db, email)
+            user = await AuthService.check_user_exist(db, email)
             if not user:
-                user = await UserService.create_new_user_social_register(db, email, username)
+                user = await AuthService.create_new_user_social_register(db, email, username)
             
-            tokens = await UserService.generate_tokens_social_login(UUID(str(user)))
+            tokens = await AuthService.generate_tokens_social_login(UUID(str(user)))
 
             return tokens

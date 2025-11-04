@@ -31,11 +31,18 @@ class Settings(BaseSettings):
     google_client_id: str = Field(..., env="GOOGLE_CLINET_ID")
     google_client_secret: str = Field(..., env="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str = Field(..., env="GOOGLE_REDIRECT_URI")
+    google_auth_url: str = Field(..., env="GOOGLE_AUTH_URL")
+    google_token_url: str = Field(..., env="GOOGLE_TOKEN_URL")
+    google_userinfo_url: str = Field(..., env="GOOGLE_USERINFO_URL")
 
 
     github_client_id: str = Field(..., env="GITHUB_CLINET_ID")
     github_client_secret: str = Field(..., env="GITHUB_CLIENT_SECRET")
     github_redirect_uri: str = Field(..., env="GITHUB_REDIRECT_URI")
+    github_authorize_url: str = Field(..., env="GITHUB_AUTHORIZE_URL")
+    github_token_url: str = Field(..., env="GITHUB_TOKEN_URL")
+    github_user_api: str = Field(..., env="GITHUB_USER_API")
+    github_emails: str = Field(..., env="GITHUB_EMAILS")
 
 
     class Config:

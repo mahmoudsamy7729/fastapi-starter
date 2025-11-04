@@ -4,15 +4,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.auth import models
+from app.core.database import db_dependency
+from app.users import models
 from app.core.config import settings
 
 
 oauth2_scheme = HTTPBearer()
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
-db_dependency = Annotated[AsyncSession, Depends(get_db)]
 
 
 def hash_password(password: str) -> str:
@@ -52,3 +50,6 @@ async def get_current_user(db: db_dependency, token: str = Depends(oauth2_scheme
         )
 
     return user
+
+
+user_dependency = Annotated[models.User, Depends(get_current_user)]

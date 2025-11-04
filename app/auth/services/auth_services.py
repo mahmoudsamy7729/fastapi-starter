@@ -1,5 +1,4 @@
 import secrets
-import os
 from pathlib import Path
 import uuid
 from uuid import UUID
@@ -8,19 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, insert, desc
 from fastapi import HTTPException, status, Request, UploadFile, File
 
-from app.auth import models, schema
+from app.auth import schema
+from app.auth.utils.exceptions import UserExceptions, TokenExceptions
 from app.core.security import hash_password
 from app.core.security import verify_password
 from app.core.jwt_handler import (create_access_token, create_refresh_token,
-                                verify_refresh_access_token, verify_verification_token,
+                                verify_refresh_token, verify_verification_token,
                                 verify_reset_token)
+from app.users.models import User
+from app.auth.models import LoginCode
 
 
 # Folder to save uploaded images
 UPLOAD_DIR = Path("uploads/images")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-class UserService:
+class AuthService:
     @staticmethod
     async def upload_image(image: UploadFile = File(...)):
          # 1. Validate file type (optional)
@@ -43,19 +45,23 @@ class UserService:
         """
         Create user and save to the DB
         """
-        result = await db.execute(
-            select(models.User).where(
-                or_(models.User.email == user_in.email, models.User.username == user_in.username)
+        email = user_in.email.strip().casefold()
+        username = user_in.username.strip()
+        existing_user = await db.scalar(
+            select(User).where(
+                or_(
+                    User.email == email,
+                    User.username == username
+                )
             )
         )
-        existing_user = result.scalar_one_or_none()
         if existing_user:
-            raise ValueError("Email or username already registered")
+            raise UserExceptions.already_exists()
         
         
         hashed_pw = hash_password(user_in.password)
 
-        new_user = models.User(
+        new_user = User(
             email=user_in.email,
             username=user_in.username,
             hashed_password=hashed_pw,
@@ -66,11 +72,10 @@ class UserService:
         await db.refresh(new_user)
         return new_user
     
-    
-    
+
     @staticmethod
     async def update_user_profile_image(db, user_id: str, image_path: str):
-        user = await db.get(models.User, user_id)
+        user = await db.get(User, user_id)
         if not user:
             raise ValueError("User not found")
         user.profile_image = image_path
@@ -80,7 +85,7 @@ class UserService:
 
     @staticmethod
     async def check_user_exist(db: AsyncSession, email: str):
-        result = await db.execute(select(models.User.id).where(models.User.email == email))
+        result = await db.execute(select(User.id).where(User.email == email))
         user = result.scalar_one_or_none()
         if user:
             return user
@@ -89,7 +94,7 @@ class UserService:
 
     @staticmethod
     async def create_new_user_social_register(db: AsyncSession, email: str, username: str):
-        new_user = models.User(
+        new_user = User(
             email=email,
             username=username,
         )
@@ -98,6 +103,7 @@ class UserService:
         await db.refresh(new_user)
         return new_user.id
     
+
     @staticmethod
     async def generate_tokens_social_login(user_id: UUID):
         access_token = create_access_token({"sub": str(user_id)})
@@ -109,55 +115,54 @@ class UserService:
         }
 
 
-
     @staticmethod
-    async def authenticate_user(user_in: schema.UserLogin, db: AsyncSession):
+    async def authenticate_user(user_in: schema.UserLogin, db: AsyncSession) -> User | bool:
         """Verify user credentials."""
-        stmt = select(models.User).where(models.User.email == user_in.email)
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
-
+        user = await db.scalar(
+                select(User).where(User.email == user_in.email)
+            )
         if not user or not verify_password(user_in.password, user.hashed_password):
-            return None
+            # logging
+            return False
         return user
     
     
     @staticmethod
     async def login_user(user_in: schema.UserLogin, db: AsyncSession):
         """Login user and return JWT token."""
-        user = await UserService.authenticate_user(user_in, db)
+        user = await AuthService.authenticate_user(user_in, db)
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+           raise UserExceptions.invalid_credentials()
         
         if not user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Please verify your email before accessing this resource"
-            )
+            raise UserExceptions.email_not_verified()
         
-
-        access_token = create_access_token({"sub": str(user.id)})
-        refresh_token = create_refresh_token({"sub": str(user.id)})
-        
+        data = {
+            "sub": str(user.id),
+            "email": user.email,
+            "username": user.username
+        }
+        access_token = create_access_token(data)
+        refresh_token = create_refresh_token(data)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token
         }
-    
+
+
     @staticmethod
     async def refresh_token(request: Request):
         """
-        Verify refresh token and return access and refresh tokenss
+        Verify refresh token and return access and refresh tokens
         """
         refresh_token = request.cookies.get("refresh_token")
-        tokens = verify_refresh_access_token(refresh_token)
+        if not refresh_token:
+            raise TokenExceptions.token_is_missing()
+        
+        tokens = verify_refresh_token(refresh_token)
         return {
             "access_token": tokens["access_token"],
-            "refresh_token": tokens["new_refresh_token"]
+            "refresh_token": tokens["refresh_token"]
         }
     
 
@@ -166,13 +171,17 @@ class UserService:
         """
         Verify Token for email verification
         """
+        if not token:
+            raise TokenExceptions.token_is_missing()
+        
         user_id = verify_verification_token(token)
 
-        result = await db.execute(select(models.User).where(models.User.id == user_id))
-        user = result.scalar_one_or_none()
+        user = await db.scalar(
+                select(User).where(User.id == user_id)
+            )
 
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise UserExceptions.invalid_credentials()
 
         if user.is_verified:
             return {"message": "Email already verified"}
@@ -183,49 +192,17 @@ class UserService:
     
 
     @staticmethod
-    async def reset_password(token: str, request: schema.ResetPasswordRequest, db: AsyncSession):
-        """
-        Verify password reset token
-        """
-        email = verify_reset_token(token)
-
-        result = await db.execute(select(models.User).where(models.User.email == email))
-        user = result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-        hashed_pw = hash_password(request.new_password)
-        user.hashed_password = hashed_pw
-        await db.commit()
-        return {"message": "Password reset successful. You can now log in."}
-    
-
-    @staticmethod
-    async def change_password(request: schema.ChangePasswordRequest, current_user: models.User ,db: AsyncSession):
-        result = await db.execute(select(models.User).where(models.User.email == current_user.email))  
-        user = result.scalar_one_or_none()
-        if not user :
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        if not verify_password(request.password, user.hashed_password):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Old password isn't correct.")
-        hashed_pw = hash_password(request.new_password)
-        user.hashed_password = hashed_pw
-        await db.commit()
-        return {"message": "Password changed successfully. You can now log in."}
-    
-
-    @staticmethod
     async def generate_login_code(request: schema.ForgetPasswordRequest, db:AsyncSession):
-        result = await db.execute(select(models.User).where(models.User.email == request.email)) 
-        user = result.scalar_one_or_none()
+        user = await db.scalar(
+            select(User).where(User.email == request.email)
+        )
         if not user :
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
+            raise UserExceptions.invalid_credentials()
         
         code = f"{secrets.randbelow(1000000):06}"
         hashed_code = hash_password(code)
         expires_at = datetime.now(UTC) + timedelta(minutes=15)
-        await db.execute(insert(models.LoginCode).values(
+        await db.execute(insert(LoginCode).values(
             user_id=user.id,
             code_hash=hashed_code,
             expires_at=expires_at
@@ -235,34 +212,34 @@ class UserService:
     
 
     @staticmethod
-    async def verify_login_code(email: str, code: str, db: AsyncSession):
-        result = await db.execute(select(models.User.id).where(models.User.email == email)) 
-        user_id = result.scalar_one_or_none()
-        if not user_id :
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
-        
-        result = await db.execute(
-        select(models.LoginCode).where(models.LoginCode.user_id == user_id).order_by(desc(models.LoginCode.created_at))
-        .limit(1)
+    async def verify_login_code(user: schema.UserLoginWithCode, db: AsyncSession):
+        user_id = await db.scalar(
+            select(User.id).where(User.email == user.email)
         )
-        login_code = result.scalar_one_or_none()
+        if not user_id :
+            raise UserExceptions.invalid_credentials()
+        
+        login_code = await db.scalar(
+            select(LoginCode).where(LoginCode.user_id == user_id).order_by(desc(LoginCode.created_at))
+        )
+
         if not login_code:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No code found or expired")
+            raise UserExceptions.login_code_expired()
         
         if login_code.expires_at < datetime.now(UTC):
             await db.delete(login_code)
             await db.commit()
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Code expired")
+            raise UserExceptions.login_code_expired()
         
-        if not verify_password(code, login_code.code_hash):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
+        if not verify_password(user.code, login_code.code_hash):
+            raise UserExceptions.invalid_login_code()
         
         await db.delete(login_code)
         await db.commit()
 
         access_token = create_access_token({"sub": str(user_id)})
         refresh_token = create_refresh_token({"sub": str(user_id)})
-        
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token

@@ -4,7 +4,7 @@ from fastapi import APIRouter, status, Request, Depends, Response
 from fastapi.responses import RedirectResponse, JSONResponse
 
 
-from app.core.database import get_db
+from app.core.database import db_dependency
 from app.auth.utils.responses import auth_response
 from app.auth.services.google_oauth_service import GoogleOAuthService
 from app.auth.services.github_oauth_service import GithubOAuthService
@@ -13,7 +13,7 @@ from app.auth.services.github_oauth_service import GithubOAuthService
 
 router = APIRouter(prefix="/auth/social", tags=["Social Auth"])
 
-db_dependency = Annotated[AsyncSession, Depends(get_db)]
+
 
 
 @router.get("/login/google/start", status_code=status.HTTP_200_OK)
