@@ -57,8 +57,8 @@ jobs:
           echo "APP_URL=http://localhost:8000" >> .env
           
           # Database
-          echo "DATABASE_URL=postgresql+psycopg2://test_user:test_pass@localhost:5432/test_db" >> .env
-          echo "TEST_DATABASE_URL=postgresql+psycopg2://test_user:test_pass@localhost:5432/test_db" >> .env
+          echo "DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
+          echo "TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
 
           # JWT (dummy values)
           echo "ALGORITHM=HS256" >> .env
@@ -70,10 +70,10 @@ jobs:
           echo "VERIFICATION_TOKEN_EXPIRE_MINUTES=10" >> .env
 
           # Mail (dummy values)
-          echo "SMTP_HOST=localhost" >> .env
-          echo "SMTP_PORT=1025" >> .env
-          echo "SMTP_USER=user@gmail.com" >> .env
-          echo "SMTP_PASSWORD=pass" >> .env
+          echo "SMTP_HOST=smtp.gmail.com" >> .env
+          echo "SMTP_PORT=587" >> .env
+          echo "SMTP_USER=sami.sam22xx@gmail.com" >> .env
+          echo "SMTP_PASSWORD=xdlm aelb niuc xnlw" >> .env
 
           # Social login (dummy values)
           echo "GOOGLE_CLIENT_ID=dummy" >> .env
