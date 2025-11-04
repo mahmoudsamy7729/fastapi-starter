@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
     print("Shutdown logic here")
 
 app = FastAPI(lifespan=lifespan)
-#setup_middlewares(app)
+
 
 origins = [
     "http://localhost:3000",  # if you have a React/Vue frontend
@@ -34,3 +34,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(social_router)
 app.include_router(users_router)
+
+
+setup_middlewares(app)
