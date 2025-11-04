@@ -1,3 +1,4 @@
+=======
 # 🚀 FastAPI Auth Starter
 
 A ready-to-use FastAPI boilerplate with JWT authentication (Access, Refresh, Email verification).
