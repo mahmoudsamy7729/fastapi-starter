@@ -70,10 +70,10 @@ jobs:
           echo "VERIFICATION_TOKEN_EXPIRE_MINUTES=10" >> .env
 
           # Mail (dummy values)
-          echo "SMTP_HOST=smtp.gmail.com" >> .env
-          echo "SMTP_PORT=587" >> .env
-          echo "SMTP_USER=sami.sam22xx@gmail.com" >> .env
-          echo "SMTP_PASSWORD=xdlm aelb niuc xnlw" >> .env
+          echo "SMTP_HOST=${{ secrets.SMTP_HOST }}" >> .env
+          echo "SMTP_PORT=${{ secrets.SMTP_PORT }}" >> .env
+          echo "SMTP_USER=${{ secrets.SMTP_USER }}" >> .env
+          echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" >> .env
 
           # Social login (dummy values)
           echo "GOOGLE_CLIENT_ID=dummy" >> .env
