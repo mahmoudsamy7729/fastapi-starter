@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# Env
+.env
+.env.*
+
+# Virtual env
+venv/
+.envs/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# __pycache__
+**/__pycache__/
+
+alembic.ini

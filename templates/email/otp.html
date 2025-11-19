@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>One-time login code</title>
+
+    <!-- Dark mode support -->
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <style>
+      html, body { margin:0 !important; padding:0 !important; height:100% !important; width:100% !important; }
+      * { -ms-text-size-adjust:100%; -webkit-text-size-adjust:100%; }
+      a { text-decoration:none; }
+      img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
+      table { border-collapse:collapse !important; }
+      a[x-apple-data-detectors] { color:inherit !important; text-decoration:none !important; }
+      u + #body a { color:#2563eb; }
+
+      .email-body { font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
+      .wrapper { width:100%; background:#f4f5f7; }
+      .container { width:100%; max-width:600px; margin:0 auto; background:#ffffff; border-radius:12px; overflow:hidden; }
+      .p-24 { padding:24px; }
+      .p-32 { padding:32px; }
+      .heading { font-size:22px; line-height:1.3; color:#111827; margin:0 0 8px; }
+      .lead { font-size:16px; line-height:1.6; color:#374151; margin:0 0 20px; }
+      .muted { color:#6b7280; font-size:14px; line-height:1.6; }
+      .divider { border-top:1px solid #e5e7eb; }
+      .btn { background:#2563eb; color:#ffffff !important; display:inline-block; padding:14px 24px; border-radius:8px; font-weight:600; }
+
+      /* OTP code styling */
+      .otp-wrap { text-align:center; margin:24px 0 8px; }
+      .otp {
+        display:inline-block;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-weight:700;
+        font-size:32px;
+        letter-spacing:8px;
+        color:#111827;
+        background:#f3f4f6;
+        padding:14px 18px;
+        border-radius:10px;
+      }
+      .hint { text-align:center; font-size:13px; color:#6b7280; margin-top:8px; }
+
+      /* Dark mode */
+      @media (prefers-color-scheme: dark) {
+        .wrapper { background:#0b0f1a !important; }
+        .container { background:#0f172a !important; }
+        .heading { color:#e5e7eb !important; }
+        .lead, .muted, .hint { color:#cbd5e1 !important; }
+        .otp { background:#111827 !important; color:#e5e7eb !important; }
+        .btn { background:#3b82f6 !important; color:#ffffff !important; }
+        a { color:#93c5fd !important; }
+        .divider { border-color:#1f2937 !important; }
+      }
+
+      @media screen and (max-width: 600px) {
+        .p-32 { padding:24px !important; }
+        .otp { font-size:28px; letter-spacing:6px; }
+      }
+    </style>
+    <!--[if mso]>
+    <style type="text/css">
+      .email-body, .email-body a, .email-body span, .email-body td { font-family: Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+  </head>
+
+  <body id="body" class="email-body" style="background:#f4f5f7; margin:0;">
+    <!-- Preheader (hidden) -->
+    <div style="display:none; overflow:hidden; line-height:1px; opacity:0; max-height:0; max-width:0;">
+      Your one-time {{app_name}} login code is {{otp_code}}. It expires in {{expires_in}}.
+      &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
+    </div>
+
+    <center class="wrapper">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+          <td align="center" style="padding:32px 16px;">
+            <table role="presentation" class="container" cellpadding="0" cellspacing="0" border="0">
+              <!-- Header -->
+              <tr>
+                <td class="p-24" style="background:#111827; color:#fff;">
+                  <table role="presentation" width="100%">
+                    <tr>
+                      <td align="left" style="font-weight:700; font-size:16px;">
+                        <a href="{{app_url}}" style="color:#fff; text-decoration:none;">{{app_name}}</a>
+                      </td>
+                      <td align="right" style="font-size:12px; opacity:.8;">Your login code</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Body -->
+              <tr>
+                <td class="p-32">
+                  <h1 class="heading">Here’s your one-time code</h1>
+                  <p class="lead">
+                    Hi {{user_name}}, use this one-time code to sign in to {{app_name}}.
+                    For your security, it expires in <strong>{{expires_in}}</strong>.
+                  </p>
+
+                  <!-- OTP Code (centered, alone on its line) -->
+                  <div class="otp-wrap">
+                    <div class="otp" aria-label="Your login code is {{otp_code}}">{{otp_code}}</div>
+                  </div>
+                  <div class="hint">Enter this code on the sign-in screen. Don’t share it with anyone.</div>
+
+                  <hr class="divider" style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;">
+
+                  <p class="muted" style="margin:0 0 6px;">
+                    Didn’t try to sign in? You can safely ignore this email. The code will expire automatically.
+                  </p>
+                  <p class="muted" style="margin:0;">
+                    Need help? Contact us at <a href="mailto:{{support_email}}">{{support_email}}</a>.
+                  </p>
+                </td>
+              </tr>
+
+              <!-- Footer -->
+              <tr>
+                <td class="p-24" style="background:#f9fafb;">
+                  <p class="muted" style="margin:0;">© {{year}} {{app_name}}, {{company_address}}</p>
+                  <p class="muted" style="margin:4px 0 0;">You’re receiving this email because a login was requested for your account.</p>
+                </td>
+              </tr>
+            </table>
+
+            <div style="height:24px; line-height:24px;">&nbsp;</div>
+          </td>
+        </tr>
+      </table>
+    </center>
+  </body>
+</html>
