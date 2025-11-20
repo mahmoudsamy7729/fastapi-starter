@@ -13,7 +13,7 @@ router = APIRouter()
 async def register_user(user_data: schemas.UserCreateRequest, repo: repo_dependency,
                         background: BackgroundTasks, email: email_dependency):
     user = await UserService.register_user(user_data, repo)
-    background.add_task(email.send_verification_email, user.email, user.id) # type: ignore
+    background.add_task(email.send_verification_email, user.email, user.id) 
     return user
 
 
@@ -57,9 +57,9 @@ async def verify_email(token: str, repo: repo_dependency):
 @router.post("/request/verify", response_model=schemas.MessageResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_verify_email(current_user: non_active_user_dependency, 
                                background: BackgroundTasks, email: email_dependency):
-    if current_user.is_active: #type:ignore
+    if current_user.is_active: 
         return {"message": "Email is already verified"}
-    background.add_task(email.send_verification_email, current_user.email, current_user.id) # type: ignore
+    background.add_task(email.send_verification_email, current_user.email, current_user.id) 
     return {"message": "New Verification Email has been sent"}
 
 
@@ -68,7 +68,7 @@ async def forget_password(data: schemas.ForgetPasswordRequest, repo: repo_depend
                           background: BackgroundTasks, email: email_dependency):
     user = await UserService.forget_password(data, repo)
     if user:
-        background.add_task(email.send_password_reset_email, user.email, user.id) #type: ignore
+        background.add_task(email.send_password_reset_email, user.email, user.id) 
     return {"message": "If an account with this email exists, a password reset link has been sent."}
 
 
@@ -92,7 +92,7 @@ async def request_login_code(data: schemas.LoginCodeRequest, user_repo:repo_depe
     result = await UserService.login_code(data, user_repo, code_repo)
     if result:
         user, code = result
-        background.add_task(email.send_login_code, user.email, code) #type: ignore
+        background.add_task(email.send_login_code, user.email, code) 
     return {"message": "If an account with this email exists, a login code has been sent."}
     
 

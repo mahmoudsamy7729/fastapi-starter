@@ -40,13 +40,7 @@ async def store_refresh_token_in_db(user_id: UUID, jti: str, refresh_token: str,
 
 
 
-def validate_refresh_token(jti: str | None, old_token: RefreshToken | None):
-    if jti is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token payload",
-        )
-
+def validate_refresh_token(jti: str , old_token: RefreshToken | None):
     if old_token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

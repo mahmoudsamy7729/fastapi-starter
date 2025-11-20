@@ -62,7 +62,12 @@ class UserService:
         payload = verify_token(refresh_token, settings.refresh_secret_key)
 
         jti = payload.get("jti")
-        old_token = await token_repo.get_by_jti(jti) #type: ignore
+        if jti is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token payload",
+            )
+        old_token = await token_repo.get_by_jti(jti) 
         validate_refresh_token(jti, old_token)
 
         for key in ("iat", "exp", "jti"):
@@ -143,8 +148,8 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid  email."
             )
-        login_code, code = await utils.generate_otp_code(user.id) #type: ignore
-        await code_repo.delete(user.id) #type: ignore
+        login_code, code = await utils.generate_otp_code(user.id) 
+        await code_repo.delete(user.id) 
         await code_repo.create(login_code)
         return user, code
 
@@ -158,7 +163,7 @@ class UserService:
                 detail="Invalid code or email."
             )
         
-        login_code = await code_repo.get_latest_for_user(user.id) #type: ignore
+        login_code = await code_repo.get_latest_for_user(user.id)
         if not login_code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -166,7 +171,7 @@ class UserService:
             )
         
         if login_code.expires_at < datetime.now(UTC):
-            await code_repo.delete(user.id) #type: ignore
+            await code_repo.delete(user.id) 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Code has expired."
@@ -178,7 +183,7 @@ class UserService:
                 detail="Invalid code or email."
             )
         
-        await code_repo.delete(user.id) #type: ignore
+        await code_repo.delete(user.id)
 
         if not user.is_active:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is disabled")
@@ -253,7 +258,7 @@ class UserService:
 
     @staticmethod
     async def deactivate_user(current_user: User, repo: UserRepository):
-        current_user.is_active = False #type: ignore
+        current_user.is_active = False 
         await repo.update(current_user)
         return True
 
