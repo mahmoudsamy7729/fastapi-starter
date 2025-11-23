@@ -15,6 +15,15 @@ venv/
 .envs/
 .venv/
 
+
+# Log files
+logs/
+log/
+*.log
+*.log*
+
+
+
 # IDE
 .vscode/
 .idea/
