@@ -5,6 +5,7 @@ from src.auth.service import UserService
 from src.auth.dependencies import repo_dependency, email_dependency, code_dependency
 from src.auth_bearer import  user_dependency, non_active_user_dependency
 from src.dependencies import token_depedency
+from src.rate_limiter import limiter
 
 
 router = APIRouter()

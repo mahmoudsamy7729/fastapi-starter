@@ -1,7 +1,12 @@
 import time
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
+from src.rate_limiter import limiter
 from src.logging import setup_logging
 from src.auth.router import router as auth_router
 
@@ -9,6 +14,12 @@ from src.auth.router import router as auth_router
 setup_logging()
 
 app = FastAPI()
+
+app.state.limiter = limiter
+
+app.add_middleware(SlowAPIMiddleware)
+
+
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -49,3 +60,4 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, tags=["auth"])
+
