@@ -62,7 +62,7 @@ jobs:
 
           # JWT (dummy values)
           echo "ALGORITHM=HS256" >> .env
-          echo "SECRET_KEY=secret" >> .env
+          echo "ACCESS_SECRET_KEY=secret" >> .env
           echo "ACCESS_TOKEN_EXPIRE=30" >> .env
           echo "REFRESH_SECRET_KEY=secret" >> .env
           echo "REFRESH_TOKEN_EXPIRE=60" >> .env
