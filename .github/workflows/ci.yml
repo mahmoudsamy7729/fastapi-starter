@@ -46,9 +46,9 @@ jobs:
         if: ${{ !hashFiles('poetry.lock') }}
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements/requirements.txt
+          pip install -r requirements.txt
 
-            - name: Prepare environment file
+      - name: Prepare environment file
         run: |
           cp .env.example .env
           echo "APP_NAME=FastAPI-Test" >> .env
@@ -63,12 +63,32 @@ jobs:
           # JWT (dummy values)
           echo "ALGORITHM=HS256" >> .env
           echo "SECRET_KEY=secret" >> .env
-          echo "ACCESS_TOKEN_EXPIRE_MINUTES=30" >> .env
+          echo "ACCESS_TOKEN_EXPIRE=30" >> .env
           echo "REFRESH_SECRET_KEY=secret" >> .env
-          echo "REFRESH_TOKEN_EXPIRE_MINUTES=60" >> .env
+          echo "REFRESH_TOKEN_EXPIRE=60" >> .env
           echo "VALIDATION_SECRET_KEY=secret" >> .env
-          echo "VALIDATION_TOKEN_EXPIRE_MINUTES=10" >> .env
+          echo "VALIDATION_TOKEN_EXPIRE=10" >> .env
 
+          # Mail (dummy values)
+          echo "SMTP_HOST=${{ secrets.SMTP_HOST }}" >> .env
+          echo "SMTP_PORT=${{ secrets.SMTP_PORT }}" >> .env
+          echo "SMTP_USER=${{ secrets.SMTP_USER }}" >> .env
+          echo "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" >> .env
+
+          # Social login (dummy values)
+          echo "GOOGLE_CLIENT_ID=dummy" >> .env
+          echo "GOOGLE_CLIENT_SECRET=dummy" >> .env
+          echo "GOOGLE_REDIRECT_URI=http://localhost" >> .env
+          echo "GOOGLE_AUTH_URL=http://localhost" >> .env
+          echo "GOOGLE_TOKEN_URL=http://localhost" >> .env
+          echo "GOOGLE_USERINFO_URL=http://localhost" >> .env
+          echo "GITHUB_CLIENT_ID=dummy" >> .env
+          echo "GITHUB_CLIENT_SECRET=dummy" >> .env
+          echo "GITHUB_REDIRECT_URI=http://localhost" >> .env
+          echo "GITHUB_AUTHORIZE_URL=http://localhost" >> .env
+          echo "GITHUB_TOKEN_URL=http://localhost" >> .env
+          echo "GITHUB_USER_API=http://localhost" >> .env
+          echo "GITHUB_EMAILS=http://localhost" >> .env
 
 
       - name: Run tests
