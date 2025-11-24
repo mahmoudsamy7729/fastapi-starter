@@ -11,7 +11,9 @@ A high-security authentication system built with **FastAPI**, featuring:
 - 🧵 Async Architecture + CPU-bound hashing in ThreadPool  
 - 🗃️ Repository Pattern + Service Layer  
 - ⚙️ Environment-based configuration  
-- 📦 Fully modular & production-ready structure  
+- 📦 Fully modular & production-ready structure
+- 
+-
 
 ---
 
