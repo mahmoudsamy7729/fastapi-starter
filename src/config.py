@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = Field(default=..., alias="DATABASE_URL")
+    test_database_url: str = Field(default=..., alias="TEST_DATABASE_URL")
     
     #JWT
     algorithm: str = Field(default=..., alias="ALGORITHM")  
