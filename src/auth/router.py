@@ -30,10 +30,11 @@ async def login_user(user_data: schemas.UserLoginRequest, repo: repo_dependency,
         samesite="lax",     # likely "none" in prod if cross-site
         max_age=7*24*60*60
     )
+
     return {"token": access_token, "user": user}
 
 
-@router.post("/refresh/token", response_model=schemas.RefreshTokenResponse, status_code=status.HTTP_200_OK)
+@router.post("/refresh-token", response_model=schemas.RefreshTokenResponse, status_code=status.HTTP_200_OK)
 async def refresh_token(request: Request, response: Response, token_repo: token_depedency):
     access_token, refresh_token = await UserService.refresh_token(request, token_repo)
     response.set_cookie(
