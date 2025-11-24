@@ -30,7 +30,6 @@ jobs:
           --health-timeout=5s
           --health-retries=5
 
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,7 +40,6 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      # Pip (requirements.txt)
       - name: Install deps (pip)
         if: ${{ !hashFiles('poetry.lock') }}
         run: |
@@ -50,15 +48,17 @@ jobs:
 
       - name: Prepare environment file
         run: |
-          cp .env.example .env
-          echo "APP_NAME=FastAPI-Test" >> .env
-          echo "APP_ENV=test" >> .env
-          echo "APP_DEBUG=False" >> .env
-          echo "APP_URL=http://localhost:8000" >> .env
-          
+          # نعمل .env نضيف فيه القيم اللي Settings محتاجها (من غير .env.example)
+          cat << 'EOF' > .env
+          APP_NAME=FastAPI-Test
+          APP_ENV=test
+          APP_DEBUG=False
+          APP_URL=http://localhost:8000
+
           # Database
-          echo "DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
-          echo "TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
+          DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
+          TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
+
 
           # JWT (dummy values)
           echo "ALGORITHM=HS256" >> .env
@@ -90,11 +90,28 @@ jobs:
           echo "GITHUB_USER_API=http://localhost" >> .env
           echo "GITHUB_EMAILS=http://localhost" >> .env
 
+          # Social login (dummy)
+          GOOGLE_CLIENT_ID=dummy
+          GOOGLE_CLIENT_SECRET=dummy
+          GOOGLE_REDIRECT_URI=http://localhost
+          GOOGLE_AUTH_URL=http://localhost
+          GOOGLE_TOKEN_URL=http://localhost
+          GOOGLE_USERINFO_URL=http://localhost
+
+          GITHUB_CLIENT_ID=dummy
+          GITHUB_CLIENT_SECRET=dummy
+          GITHUB_REDIRECT_URI=http://localhost
+          GITHUB_AUTHORIZE_URL=http://localhost
+          GITHUB_TOKEN_URL=http://localhost
+          GITHUB_USER_API=http://localhost
+          GITHUB_EMAILS=http://localhost
+          EOF
 
       - name: Run tests
         env:
           ENV: test
-        run: pytest -q --maxfail=1 --disable-warnings 
+        run: pytest -q --maxfail=1 --disable-warnings
+
       - name: Upload coverage HTML
         if: always()
         uses: actions/upload-artifact@v4
