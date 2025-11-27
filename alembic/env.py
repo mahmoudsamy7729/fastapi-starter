@@ -8,8 +8,9 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 from src.database import Base
 from src.config import settings
-from src.auth import models
-from src import models
+from src.auth import models as auth_models
+from src.billing import models as billing_models
+from src import models 
 
 
 # this is the Alembic Config object, which provides

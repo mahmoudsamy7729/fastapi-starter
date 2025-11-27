@@ -1,5 +1,6 @@
 import time
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from slowapi.errors import RateLimitExceeded
@@ -9,6 +10,8 @@ from slowapi import _rate_limit_exceeded_handler
 from src.rate_limiter import limiter
 from src.logging import setup_logging
 from src.auth.router import router as auth_router
+from src.billing.router import router as billing_router
+from src.exceptions import validation_exception_handler
 
 
 setup_logging()
@@ -59,5 +62,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore
+
 app.include_router(auth_router, tags=["auth"])
+app.include_router(billing_router)
 

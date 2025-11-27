@@ -2,7 +2,7 @@ from uuid import uuid4, UUID as PyUUID
 from enum import Enum
 from datetime import timezone, datetime
 from src.database import Base
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Enum as SAENUM
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Enum as SAENUM
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -21,6 +21,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False) 
     password: Mapped[str] = mapped_column(String(255), nullable=True) #nullable true for social login 
+    is_admin: Mapped[bool] = mapped_column(Boolean(), default=False)
     is_active: Mapped[bool] = mapped_column(Boolean(), default=True) 
     is_verified: Mapped[bool] = mapped_column(Boolean(), default=False) 
     provider: Mapped[Provider] = mapped_column(SAENUM(Provider), nullable=False)
@@ -30,6 +31,7 @@ class User(Base):
                 default=lambda: datetime.now(timezone.utc),onupdate=lambda: datetime.now(timezone.utc))
     
     profile = relationship("Profile", back_populates="user", uselist=False)
+    subscriptions = relationship("Subscription", back_populates="user")
 
 
 class Profile(Base):
