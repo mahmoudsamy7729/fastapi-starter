@@ -1,5 +1,5 @@
 from uuid import UUID
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from src.auth.models import Provider
 
 
@@ -14,12 +14,12 @@ class UserRead(UserBase):
 
 
 class UserCreateRequest(UserBase):
-    password: str
+    password: str = Field(min_length=6, max_length=128)
 
 
 class UserLoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=6, max_length=128)
 
 
 class UserLoginResponse(BaseModel):
@@ -47,8 +47,8 @@ class NewPasswordRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
+    old_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
 
 
 class LoginCodeRequest(BaseModel):

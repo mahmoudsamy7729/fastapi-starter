@@ -1,0 +1,123 @@
+from uuid import UUID
+from typing import List, Optional
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.billing.models import Plan, Subscription, SubscriptionStatus, BillingPeriod
+
+class PlanRepository:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+
+    async def list_plans(self, active_only: bool = True) -> List[Plan]:
+        stmt = select(Plan)
+        if active_only:
+            stmt = stmt.where(Plan.is_active.is_(True))
+        result = await self.db.execute(stmt.order_by(Plan.price_cents))
+        return list(result.scalars().all())
+    
+
+    async def get_by_id(self, plan_id: UUID) -> Optional[Plan]:
+        result = await self.db.execute(
+            select(Plan).where(Plan.id == plan_id)
+        )
+        return result.scalar_one_or_none()
+    
+
+    async def get_by_code(self, code: str) -> Optional[Plan]:
+        result = await self.db.execute(
+            select(Plan).where(Plan.code == code, Plan.is_active.is_(True))
+        )
+        return result.scalar_one_or_none()
+    
+
+    async def create(self, data: dict) -> Plan:
+        plan = Plan(**data)
+        self.db.add(plan)
+        await self.db.commit()
+        await self.db.refresh(plan)
+        return plan
+    
+
+    async def update(self, plan: Plan, data: dict) -> Plan:
+        for k, v in data.items():
+            if v is not None:
+                setattr(plan, k, v)
+        await self.db.commit()
+        await self.db.refresh(plan)
+        return plan
+    
+
+    async def soft_delete(self, plan: Plan) -> None:
+        plan.is_active = False
+        await self.db.commit()
+    
+
+class SubscriptionRepoistory:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+
+    async def list_for_user(self, user_id: UUID) -> List[Subscription]:
+        result = await self.db.execute(
+            select(Subscription)
+            .where(Subscription.user_id == user_id)
+            .order_by(Subscription.started_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def get_active_for_user(self, user_id: UUID) -> Optional[Subscription]:
+        result = await self.db.execute(
+            select(Subscription).where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(
+                    [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRAILAING]
+                ),
+            )
+        )
+        return result.scalar_one_or_none()
+    
+
+    async def create_subscription(self, user_id: UUID, plan: Plan) -> Subscription:
+        old_sub = await self.get_active_for_user(user_id)
+        if old_sub:
+            old_sub.status = SubscriptionStatus.EXPIRED
+
+        now = datetime.now(timezone.utc)
+        period_delta = (
+            timedelta(days=30)
+            if plan.billing_period == BillingPeriod.MONTHLY
+            else timedelta(days=365)
+        )
+
+        sub = Subscription(
+            user_id=user_id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            started_at=now,
+            current_period_end=now + period_delta,
+        )
+
+        self.db.add(sub)
+        await self.db.commit()
+        await self.db.refresh(sub)
+        return sub
+    
+
+    async def cancel_at_period_end(self, subscription: Subscription) -> Subscription:
+        subscription.cancel_at_period_end = True
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+    
+
+    async def cancel_immediately(self, subscription: Subscription) -> Subscription:
+        subscription.status = SubscriptionStatus.CANCELED
+        subscription.current_period_end = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(subscription)
+        return subscription
+    
+
+

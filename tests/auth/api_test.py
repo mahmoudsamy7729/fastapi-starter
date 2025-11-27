@@ -116,6 +116,7 @@ async def test_refresh_token_success(client: AsyncClient, active_user):
     assert "token" in data
     assert data["type"] == "Bearer"
 
+
 @pytest.mark.asyncio
 async def test_refresh_token_missing(client: AsyncClient):
     response = await client.post("/refresh-token")
