@@ -27,18 +27,16 @@ async def create_plan(data: schemas.PlanCreate, plan_dep: plan_dependency, admin
 @router.get("/plans/{plan_id}", response_model=schemas.PlanOut, status_code=status.HTTP_200_OK)
 async def get_plan(plan_id: UUID, plan_dep: plan_dependency):
     plan = await PlanService.get_plan_by_id(plan_id, plan_dep)
-    if not plan:
-        pass
     return plan
 
 
 @router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_plan(plan_id: UUID, plan_deb: plan_dependency):
+async def delete_plan(plan_id: UUID, plan_deb: plan_dependency, admin_user: admin_user_dependency):
     result = await PlanService.soft_delete_plan(plan_id, plan_deb)
 
 
 @router.patch("/plans/{plan_id}", response_model=schemas.PlanOut, status_code=status.HTTP_200_OK)
-async def update_plan(plan_id: UUID, data: schemas.PlanUpdate, plan_dep: plan_dependency):
+async def update_plan(plan_id: UUID, data: schemas.PlanUpdate, plan_dep: plan_dependency, admin_user: admin_user_dependency):
     return await PlanService.update_plan(plan_id, data, plan_dep)
 
 

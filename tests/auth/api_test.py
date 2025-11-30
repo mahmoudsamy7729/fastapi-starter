@@ -20,9 +20,9 @@ async def test_register_user_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_user_duplicate_email(client: AsyncClient):
+async def test_register_user_duplicate_email(client: AsyncClient, active_user):
     payload = {
-        "email": "sam@example.com",
+        "email": active_user.email,
         "username": "sam2",
         "password": "password123"
     }
@@ -33,10 +33,10 @@ async def test_register_user_duplicate_email(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_user_duplicate_username(client: AsyncClient):
+async def test_register_user_duplicate_username(client: AsyncClient, active_user):
     payload = {
         "email": "sam2@example.com",
-        "username": "sam",
+        "username": active_user.username,
         "password": "password123"
     }
 

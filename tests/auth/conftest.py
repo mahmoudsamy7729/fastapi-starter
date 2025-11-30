@@ -18,7 +18,6 @@ async def active_user():
         if user:
             return user
 
-        # 2) لو مش موجود، اعمله create
         hashed = await hash_password("123456")
 
         user = User(

@@ -1,10 +1,7 @@
-import stripe
 from uuid import UUID
 from fastapi import HTTPException, status
 from src.billing.repository import PlanRepository, SubscriptionRepoistory
-from src.billing import schemas, utils
-from src.billing.models import PaymentProvider
-from src.auth.models import User
+from src.billing import schemas
 
 
 
@@ -20,7 +17,7 @@ class PlanService:
     async def create_plan(data: schemas.PlanCreate, repo: PlanRepository):
         existing_code = await repo.get_by_code(data.code)
         if existing_code :
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Existing Code")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Existing Code")
         result = await repo.create(data.model_dump())
         return result
 
@@ -80,9 +77,8 @@ class SubscriptionService:
     @staticmethod
     async def cancel_subscription(user_id: UUID, sub_repo: SubscriptionRepoistory):
         subscription = await sub_repo.get_active_for_user(user_id)
-        if not subscription:
+        if subscription.cancel_at_period_end is True or not subscription: #type: ignore
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active subscription found for this user.")
-        
         await sub_repo.cancel_at_period_end(subscription)
         return subscription
     
