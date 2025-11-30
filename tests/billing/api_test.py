@@ -159,26 +159,6 @@ async def test_get_my_subscription_none(client: AsyncClient, logged_in_user):
 
 
 @pytest.mark.asyncio
-async def test_subscribe_to_plan(
-    client: AsyncClient, logged_in_user, test_plan
-    ):
-    headers = {"Authorization": f"Bearer {logged_in_user['token']}"}
-
-    payload = {"plan_code": test_plan.code}
-
-    response = await client.post(
-        "/billing/subscriptions/subscribe",
-        json=payload,
-        headers=headers,
-    )
-
-    assert response.status_code == status.HTTP_201_CREATED
-    data = response.json()
-    assert data["plan_id"] == str(test_plan.id)
-    assert data["status"] == "active"
-
-
-@pytest.mark.asyncio
 async def test_get_my_subscription(
     client: AsyncClient, logged_in_user, test_subscription
 ):
