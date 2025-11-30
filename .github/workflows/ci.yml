@@ -90,6 +90,10 @@ jobs:
           echo "GITHUB_USER_API=http://localhost" >> .env
           echo "GITHUB_EMAILS=http://localhost" >> .env
 
+          echo "REDIS_URL=http://localhost" >> .env
+          echo "CELERY_WORKER_URL=http://localhost" >> .env
+          echo "CELERY_BEAT_URL=http://localhost" >> .env
+
 
       - name: Run tests
         env:
