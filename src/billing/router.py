@@ -1,11 +1,11 @@
 from uuid import UUID
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, BackgroundTasks
 from src.billing.service import PlanService, SubscriptionService
 from src.billing import schemas
-from src.billing.dependencies import plan_dependency, subscription_dependency
-from src.auth_bearer import  user_dependency
-
-
+from src.billing.dependencies import plan_dependency, subscription_dependency, email_dependency
+from src.auth_bearer import  user_dependency, admin_user_dependency
+from src.billing.tasks import send_subscription_email_task
+from src.billing.utils import serialize_subscription
 
 
 
@@ -19,7 +19,7 @@ async def list_plans(plan_dep: plan_dependency):
 
 
 @router.post("/plans", response_model=schemas.PlanOut, status_code=status.HTTP_201_CREATED)
-async def create_plan(data: schemas.PlanCreate, plan_dep: plan_dependency):
+async def create_plan(data: schemas.PlanCreate, plan_dep: plan_dependency, admin_user: admin_user_dependency):
     result = await PlanService.create_plan(data, plan_dep)
     if result:
         return result
@@ -37,7 +37,6 @@ async def delete_plan(plan_id: UUID, plan_deb: plan_dependency):
     result = await PlanService.soft_delete_plan(plan_id, plan_deb)
 
 
-
 @router.patch("/plans/{plan_id}", response_model=schemas.PlanOut, status_code=status.HTTP_200_OK)
 async def update_plan(plan_id: UUID, data: schemas.PlanUpdate, plan_dep: plan_dependency):
     return await PlanService.update_plan(plan_id, data, plan_dep)
@@ -51,8 +50,9 @@ async def get_my_subscription(user: user_dependency, sub_dep: subscription_depen
 
 @router.post("/subscriptions/subscribe", response_model=schemas.SubscriptionOut, status_code=status.HTTP_201_CREATED)
 async def subscribe_to_plan(user: user_dependency, data: schemas.SubscribeRequest,
-                sub_dep: subscription_dependency, plan_dep: plan_dependency):
+                sub_dep: subscription_dependency, plan_dep: plan_dependency,):
     subscription = await SubscriptionService.subscribe_user_to_plan(user.id, data.plan_code, sub_dep, plan_dep)
+    send_subscription_email_task.delay(serialize_subscription(subscription)) #type: ignore
     return subscription
 
 
@@ -64,4 +64,3 @@ async def cancel_subscription(user: user_dependency, sub_deb: subscription_depen
 
 
     
-

@@ -11,7 +11,7 @@ class Emails:
     @staticmethod
     async def send_verification_email(email: str, user_id):
         data = {"sub": str(user_id)}
-        token = generate_token(data, settings.validation_token_expire, settings.validation_secret_key)
+        token,_,_ = generate_token(data, settings.validation_token_expire, settings.validation_secret_key)
         verify_url = f"{settings.app_url}/verify?token={token}"
         message = MessageSchema(
             subject="Email Verification",
@@ -34,7 +34,7 @@ class Emails:
         Send password reset link when user forget their password
         """
         data = {"sub": str(user_id)}
-        token = generate_token(data, settings.validation_token_expire, settings.validation_secret_key)
+        token,_,_ = generate_token(data, settings.validation_token_expire, settings.validation_secret_key)
         verify_url = f"{settings.app_url}/auth/password-reset?token={token}"
         message = MessageSchema(
             subject="Password Reset",

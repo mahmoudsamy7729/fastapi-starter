@@ -18,9 +18,9 @@ class PlanService:
 
     @staticmethod
     async def create_plan(data: schemas.PlanCreate, repo: PlanRepository):
-        existing_code = repo.get_by_code(data.code)
+        existing_code = await repo.get_by_code(data.code)
         if existing_code :
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Existing Code")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Existing Code")
         result = await repo.create(data.model_dump())
         return result
 
@@ -66,6 +66,9 @@ class SubscriptionService:
     @staticmethod 
     async def subscribe_user_to_plan(user_id: UUID, plan_code: str,
                                     sub_repo: SubscriptionRepoistory, plan_repo: PlanRepository):
+        exisitng_sub = await sub_repo.get_active_for_user(user_id)
+        if exisitng_sub:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already has an active subscription.")
         plan = await plan_repo.get_by_code(plan_code)
         if not plan:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active plan found for this code.")

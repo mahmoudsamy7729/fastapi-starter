@@ -2,6 +2,7 @@ from uuid import UUID
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.billing.models import Plan, Subscription, SubscriptionStatus, BillingPeriod
 
@@ -102,7 +103,16 @@ class SubscriptionRepoistory:
         self.db.add(sub)
         await self.db.commit()
         await self.db.refresh(sub)
-        return sub
+
+        result = await self.db.execute(
+        select(Subscription)
+        .where(Subscription.id == sub.id)
+        .options(
+                selectinload(Subscription.user),
+                selectinload(Subscription.plan),
+            )
+        )
+        return result.scalar_one()
     
 
     async def cancel_at_period_end(self, subscription: Subscription) -> Subscription:

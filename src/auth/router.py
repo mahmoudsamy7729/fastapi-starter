@@ -59,7 +59,7 @@ async def verify_email(token: str, repo: repo_dependency):
 @router.post("/request/verify", response_model=schemas.MessageResponse, status_code=status.HTTP_202_ACCEPTED)
 async def request_verify_email(current_user: non_active_user_dependency, 
                                background: BackgroundTasks, email: email_dependency):
-    if current_user.is_active: 
+    if current_user.is_verified: 
         return {"message": "Email is already verified"}
     background.add_task(email.send_verification_email, current_user.email, current_user.id) 
     return {"message": "New Verification Email has been sent"}

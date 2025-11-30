@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import Depends
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from src.config import settings
@@ -15,6 +16,8 @@ async_session = sessionmaker(
 )
 
 
+
+
 Base = declarative_base()
 
 
@@ -24,3 +27,30 @@ async def get_db():
 
 
 db_dependency = Annotated[AsyncSession, Depends(get_db)]
+
+
+
+# ---------------------------
+# SYNC (Celery)
+# ---------------------------
+sync_engine = create_engine(
+    settings.sync_database_url,
+    future=True,
+    echo=False,
+)
+
+SyncSessionLocal = sessionmaker(
+    bind=sync_engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,
+)
+
+
+def get_sync_session():
+    """Used ONLY inside Celery tasks."""
+    db = SyncSessionLocal()
+    try:
+        return db
+    finally:
+        db.close()

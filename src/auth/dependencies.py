@@ -23,7 +23,6 @@ def get_profile_repo(db: db_dependency) -> ProfileReposiotry:
 profile_dependency = Annotated[ProfileReposiotry, Depends(get_profile_repo)]
 
 
-#EMAIL DEPENDENCY
 async def get_email_service():
     return Emails()
 
