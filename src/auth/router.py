@@ -14,7 +14,7 @@ router = APIRouter()
 async def register_user(user_data: schemas.UserCreateRequest, repo: repo_dependency,
                         background: BackgroundTasks, email: email_dependency):
     user = await UserService.register_user(user_data, repo)
-    background.add_task(email.send_verification_email, user.email, user.id) 
+    #background.add_task(email.send_verification_email, user.email, user.id) 
     return user
 
 

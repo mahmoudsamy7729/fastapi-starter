@@ -16,14 +16,13 @@ TestSessionDB = sessionmaker(bind=test_engine, class_=AsyncSession, autoflush=Fa
 async def init_db():
     from src.database import Base
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await test_engine.dispose()
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture()
 async def override_dependencies():
     async def _get_test_db():
         async with TestSessionDB() as session:
@@ -32,11 +31,26 @@ async def override_dependencies():
     yield
     app.dependency_overrides.clear()
 
+
 @pytest.fixture()
-async def client(init_db):
-        # ✅ Disable SlowAPI rate limiting during tests
+async def db_session(init_db):
+    async with TestSessionDB() as session:
+        yield session
+
+@pytest.fixture()
+async def client(db_session):
+    async def _get_test_db():
+        yield db_session  # FastAPI routes get the same session
+
+    app.dependency_overrides[get_db] = _get_test_db
+
     if hasattr(app.state, "limiter"):
         app.state.limiter.enabled = False
 
     async with AsyncClient(app=app, base_url="http://testserver") as ac:
         yield ac
+
+    app.dependency_overrides.clear()
+
+
+

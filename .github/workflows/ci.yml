@@ -58,6 +58,7 @@ jobs:
           
           # Database
           echo "DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
+          echo "SYNC_DATABASE_URL=postgresql+psycopg://test_user:test_pass@localhost:5432/test_db" >> .env
           echo "TEST_DATABASE_URL=postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db" >> .env
 
           # JWT (dummy values)

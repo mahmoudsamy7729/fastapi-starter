@@ -11,7 +11,9 @@ A high-security authentication system built with **FastAPI**, featuring:
 - 🧵 Async Architecture + CPU-bound hashing in ThreadPool  
 - 🗃️ Repository Pattern + Service Layer  
 - ⚙️ Environment-based configuration  
-- 📦 Fully modular & production-ready structure  
+- 📦 Fully modular & production-ready structure
+- 
+-
 
 ---
 
@@ -144,8 +146,5 @@ uvicorn src.main:app --reload
 This project is licensed under the **MIT License** — free for personal and commercial use.
 
 
-
-
-# test ci
 
 
