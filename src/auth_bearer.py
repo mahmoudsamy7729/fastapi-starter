@@ -59,10 +59,19 @@ async def get_not_active_user(current_user: User = Depends(get_user)) -> User:
         )
     
     return current_user
+
+
+async def get_admin_user(current_user: User = Depends(get_active_user)) -> User:
+    if current_user.is_admin is False :
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User does not have admin privileges"
+        )
+    return current_user
     
 non_active_user_dependency = Annotated[User, Depends(get_not_active_user)]
 user_dependency = Annotated[User, Depends(get_active_user)]
-
+admin_user_dependency = Annotated[User, Depends(get_admin_user)]
 
 
 

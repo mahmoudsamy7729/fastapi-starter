@@ -1,0 +1,75 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: fastapi_app
+    restart: always
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - .:/app
+
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1512
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+
+  redis:
+    image: redis:7
+    container_name: redis_server
+    restart: always
+    ports:
+      - "6379:6379"
+
+
+  celery:
+    build: .
+    container_name: fastapi_celery
+    restart: always
+    env_file: .env
+    depends_on:
+      - api
+      - redis
+    command: celery -A src.celery_app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+
+  celery_beat:
+    build: .
+    container_name: fastapi_celery_beat
+    command: celery -A src.celery_app.beat_app beat --loglevel=info
+    env_file: .env
+    depends_on:
+      - api
+      - redis
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

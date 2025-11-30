@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = Field(default=..., alias="DATABASE_URL")
+    sync_database_url: str = Field(default=..., alias="SYNC_DATABASE_URL")
     test_database_url: str = Field(default=..., alias="TEST_DATABASE_URL")
     
     #JWT
@@ -51,6 +52,11 @@ class Settings(BaseSettings):
     github_token_url: str = Field(default=...)
     github_user_api: str = Field(default=...)
     github_emails: str = Field(default=...)
+
+
+    redis_url: str = Field(default=...)
+    celery_worker_url: str = Field(default=...)
+    celery_beat_url: str = Field(default=...)
 
     
 
