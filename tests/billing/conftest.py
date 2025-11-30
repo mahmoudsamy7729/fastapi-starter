@@ -159,7 +159,6 @@ async def test_subscription(normal_user, test_plan):
             plan_id=test_plan.id,
             status=SubscriptionStatus.ACTIVE,
             started_at=None,
-            expires_at=None,
         )
         session.add(subscription)
         await session.commit()
