@@ -97,7 +97,7 @@ class SubscriptionService:
     @staticmethod
     async def cancel_subscription_at_end_of_period(user_id: UUID, sub_repo: SubscriptionRepoistory):
         subscription = await sub_repo.get_active_for_user(user_id)
-        if subscription.cancel_at_period_end is True or not subscription: #type: ignore
+        if not subscription or subscription.cancel_at_period_end is True: #type: ignore
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active subscription found for this user.")
         await sub_repo.cancel_at_period_end(subscription)
         return subscription
