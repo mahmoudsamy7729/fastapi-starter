@@ -95,6 +95,10 @@ jobs:
           echo "CELERY_WORKER_URL=http://localhost" >> .env
           echo "CELERY_BEAT_URL=http://localhost" >> .env
 
+          echo "STRIPE_PUBLIC_KEY=dummy" >> .env
+          echo "STRIPE_SECRET_KEY=dummy" >> .env
+          echo "STRIPE_WEBHOOK_SECRET=dummy" >> .env
+
 
       - name: Run tests
         env:

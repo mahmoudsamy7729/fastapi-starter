@@ -58,7 +58,11 @@ class Settings(BaseSettings):
     celery_worker_url: str = Field(default=...)
     celery_beat_url: str = Field(default=...)
 
-    
+
+    stripe_webhook_secret: str = Field(default=...)
+    stripe_public_key: str = Field(default=...)
+    stripe_secret_key: str = Field(default=...)
+
 
     class Config:
         env_file = BASE_DIR / ".env"
