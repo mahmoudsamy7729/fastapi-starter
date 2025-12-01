@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from httpx import AsyncClient
 from fastapi import status
 
@@ -6,17 +7,21 @@ from fastapi import status
 
 @pytest.mark.asyncio
 async def test_register_user_success(client: AsyncClient):
-    payload = {
-        "email": "sam@example.com",
-        "username": "sam",
-        "password": "password123"
-    }
+    with patch("src.auth.emails.Emails.send_verification_email") as mock_send_email:
+        payload = {
+            "email": "sam@example.com",
+            "username": "sam",
+            "password": "password123"
+        }
 
-    response = await client.post("/register", json=payload)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["email"] == payload["email"]
-    assert data["username"] == payload["username"]
+        response = await client.post("/register", json=payload)
+        assert response.status_code == 201
+        mock_send_email.assert_called_once()
+        args, kwargs = mock_send_email.call_args
+        assert args[0] == "sam@example.com"
+        data = response.json()
+        assert data["email"] == payload["email"]
+        assert data["username"] == payload["username"]
 
 
 @pytest.mark.asyncio
