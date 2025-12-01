@@ -16,8 +16,4 @@ def get_subscription_repo(db: db_dependency) -> SubscriptionRepoistory:
 subscription_dependency = Annotated[SubscriptionRepoistory, Depends(get_subscription_repo)]
 
 
-async def get_email_service():
-    return Emails()
-
-email_dependency = Annotated[Emails, Depends(get_email_service)]
 

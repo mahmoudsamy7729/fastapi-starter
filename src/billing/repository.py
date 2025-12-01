@@ -80,7 +80,8 @@ class SubscriptionRepoistory:
         return result.scalar_one_or_none()
     
 
-    async def create_subscription(self, user_id: UUID, plan: Plan) -> Subscription:
+    async def create_subscription(self, user_id: UUID, plan: Plan, provider: str, 
+            provider_subscription_id: str, provider_customer_id: str) -> Subscription:
         old_sub = await self.get_active_for_user(user_id)
         if old_sub:
             old_sub.status = SubscriptionStatus.EXPIRED
@@ -96,6 +97,11 @@ class SubscriptionRepoistory:
             user_id=user_id,
             plan_id=plan.id,
             status=SubscriptionStatus.ACTIVE,
+            # provider fields
+            provider=provider,
+            provider_subscription_id=provider_subscription_id,
+            provider_customer_id=provider_customer_id,
+
             started_at=now,
             current_period_end=now + period_delta,
         )

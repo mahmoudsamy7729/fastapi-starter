@@ -24,6 +24,7 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean(), default=False)
     is_active: Mapped[bool] = mapped_column(Boolean(), default=True) 
     is_verified: Mapped[bool] = mapped_column(Boolean(), default=False) 
+    stripe_customer_id: Mapped[str] = mapped_column(String(), nullable=True)
     provider: Mapped[Provider] = mapped_column(SAENUM(Provider), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                     default=lambda: datetime.now(timezone.utc))

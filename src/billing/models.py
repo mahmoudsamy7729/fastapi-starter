@@ -42,6 +42,8 @@ class Plan(Base):
     currency: Mapped[str] = mapped_column(String(10), default="USD")
     billing_period: Mapped[BillingPeriod] = mapped_column(SAEnum(BillingPeriod))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    stripe_product_id: Mapped[str] = mapped_column(String(), nullable=True)
+    stripe_price_id: Mapped[str] = mapped_column(String(), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                     default=lambda: datetime.now(timezone.utc))
@@ -63,6 +65,9 @@ class Subscription(Base):
     plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True),
             ForeignKey("plans.id", ondelete="CASCADE"), index=True)
     status: Mapped[SubscriptionStatus] = mapped_column(SAEnum(SubscriptionStatus))
+    provider: Mapped[str] = mapped_column(String(), nullable=False)
+    provider_subscription_id: Mapped[str] = mapped_column(String(), nullable=True, unique=True)
+    provider_customer_id: Mapped[str] = mapped_column(String(), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                     default=lambda: datetime.now(timezone.utc))
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

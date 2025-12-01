@@ -1,11 +1,17 @@
+import stripe
+import json
+from fastapi.concurrency import run_in_threadpool
 from uuid import UUID
-from fastapi import APIRouter, status, BackgroundTasks
+from src.rate_limiter import limiter
+from fastapi import APIRouter, status, Request, Header
 from src.billing.service import PlanService, SubscriptionService
 from src.billing import schemas
-from src.billing.dependencies import plan_dependency, subscription_dependency, email_dependency
+from src.billing.dependencies import plan_dependency, subscription_dependency
+from src.auth.dependencies import repo_dependency
 from src.auth_bearer import  user_dependency, admin_user_dependency
 from src.billing.tasks import send_subscription_email_task
 from src.billing.utils import serialize_subscription
+from src.config import settings
 
 
 
@@ -46,18 +52,28 @@ async def get_my_subscription(user: user_dependency, sub_dep: subscription_depen
     return subscription
 
 
-@router.post("/subscriptions/subscribe", response_model=schemas.SubscriptionOut, status_code=status.HTTP_201_CREATED)
+@router.post("/subscriptions/subscribe", status_code=status.HTTP_201_CREATED)
 async def subscribe_to_plan(user: user_dependency, data: schemas.SubscribeRequest,
-                sub_dep: subscription_dependency, plan_dep: plan_dependency,):
-    subscription = await SubscriptionService.subscribe_user_to_plan(user.id, data.plan_code, sub_dep, plan_dep)
-    send_subscription_email_task.delay(serialize_subscription(subscription)) #type: ignore
-    return subscription
+                sub_dep: subscription_dependency, plan_dep: plan_dependency, user_repo: repo_dependency):
+    checkout_url = await SubscriptionService.subscribe_user_to_plan(user, data.plan_code, sub_dep, plan_dep, user_repo)
+    return checkout_url
 
 
 @router.post("/subscriptions/cancel", response_model=schemas.SubscriptionOut, status_code=status.HTTP_200_OK)
-async def cancel_subscription(user: user_dependency, sub_deb: subscription_dependency):
-    subscription = await SubscriptionService.cancel_subscription(user.id, sub_deb)
+async def cancel_subscription_at_end_of_period(user: user_dependency, sub_deb: subscription_dependency):
+    subscription = await SubscriptionService.cancel_subscription_at_end_of_period(user.id, sub_deb)
     return subscription
+
+
+@router.post("/stripe/webhook")
+@limiter.exempt
+async def stripe_webhook(request: Request,
+        user_repo: repo_dependency, sub_dep: subscription_dependency, plan_dep: plan_dependency,
+        stripe_signature: str = Header(str)):
+    await SubscriptionService.stripe_webhook(request, stripe_signature, sub_dep, plan_dep)
+    return {"message": "Unhandled event"}
+
+
 
 
 
