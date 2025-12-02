@@ -2,7 +2,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from src.billing.models import BillingPeriod, SubscriptionStatus, PaymentStatus, PaymentProvider
+from src.billing.models import BillingPeriod, SubscriptionStatus, PaymentStatus, PaymentProvider, Plan
 
 
 
@@ -28,8 +28,12 @@ class PlanUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class PlanOut(PlanBase):
+class PlanOut(BaseModel):
     id: UUID
+    name: str
+    code: str
+    price_cents: int
+    currency: str
 
     class Config:
         from_attributes = True
@@ -37,13 +41,15 @@ class PlanOut(PlanBase):
 
 class SubscriptionOut(BaseModel):
     id: UUID
-    user_id: UUID
-    plan_id: UUID
-    status: SubscriptionStatus
-    started_at: datetime
+    status: SubscriptionStatus  
+    started_at: datetime 
+    cancel_at_period_end: bool 
     current_period_end: Optional[datetime]
-    cancel_at_period_end: bool
-
+    provider: PaymentProvider
+    provider_subscription_id: str
+    plan: PlanOut
+    
+    
     class Config:
         from_attributes = True
 
@@ -51,3 +57,6 @@ class SubscriptionOut(BaseModel):
 class SubscribeRequest(BaseModel):
     plan_code: str
 
+
+class CheckoutUrlResponse(BaseModel):
+    checkout_url: str
