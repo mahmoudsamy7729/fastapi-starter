@@ -12,7 +12,6 @@ class SubscriptionStatus(str, Enum):
     TRAILAING = "trialing"
     CANCELED = "canceled"
     PAST_DUE = "past_due"
-    EXPIRED = "expired"
 
 class BillingPeriod(str, Enum):
     MONTHLY = "monthly"
@@ -71,6 +70,7 @@ class Subscription(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                     default=lambda: datetime.now(timezone.utc))
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
 
 

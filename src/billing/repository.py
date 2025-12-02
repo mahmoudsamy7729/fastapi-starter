@@ -1,10 +1,11 @@
 from uuid import UUID
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.billing.models import Plan, Subscription, SubscriptionStatus, BillingPeriod
+
 
 class PlanRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -55,6 +56,7 @@ class PlanRepository:
         await self.db.commit()
     
 
+
 class SubscriptionRepoistory:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -68,13 +70,26 @@ class SubscriptionRepoistory:
         )
         return list(result.scalars().all())
 
-    async def get_active_for_user(self, user_id: UUID) -> Optional[Subscription]:
+
+    async def get_subscription_with_access(self, user_id: UUID) -> Subscription | None:
+        now = datetime.now(timezone.utc)
+
         result = await self.db.execute(
-            select(Subscription).where(
+            select(Subscription)
+            .where(
                 Subscription.user_id == user_id,
+                Subscription.current_period_end > now,
                 Subscription.status.in_(
-                    [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRAILAING]
+                    [
+                        SubscriptionStatus.ACTIVE,
+                        SubscriptionStatus.CANCELED,  # cancel_at_period_end true still allowed
+                    ]
                 ),
+            )
+            .order_by(Subscription.current_period_end.desc())
+            .options(
+                selectinload(Subscription.user),
+                selectinload(Subscription.plan),
             )
         )
         return result.scalar_one_or_none()
@@ -84,7 +99,7 @@ class SubscriptionRepoistory:
             provider_subscription_id: str, provider_customer_id: str) -> Subscription:
         old_sub = await self.get_active_for_user(user_id)
         if old_sub:
-            old_sub.status = SubscriptionStatus.EXPIRED
+            old_sub.status = SubscriptionStatus.CANCELED
 
         now = datetime.now(timezone.utc)
         period_delta = (
@@ -134,6 +149,84 @@ class SubscriptionRepoistory:
         await self.db.commit()
         await self.db.refresh(subscription)
         return subscription
+    
+
+    async def update_subscription_period(
+        self,
+        provider: str,
+        provider_subscription_id: str,
+        current_period_start: datetime,
+        current_period_end: datetime
+    ) -> Subscription | None:
+        result = await self.db.execute(
+            select(Subscription).where(
+                Subscription.provider == provider,
+                Subscription.provider_subscription_id == provider_subscription_id,
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            print("⚠️ No local subscription found for stripe_subscription_id:", provider_subscription_id)
+            return None
+
+        sub.status = SubscriptionStatus.ACTIVE  
+        sub.started_at = current_period_start
+        sub.current_period_end = current_period_end
+
+        await self.db.commit()
+        await self.db.refresh(sub)
+        result = await self.db.execute(
+        select(Subscription)
+        .where(Subscription.id == sub.id)
+        .options(
+                selectinload(Subscription.user),
+                selectinload(Subscription.plan),
+            )
+        )
+        return result.scalar_one()
+    
+
+    async def cancel_subscription(
+        self,
+        provider: str,
+        provider_subscription_id: str,
+        canceled_at: datetime,
+        current_period_end: datetime | None = None,
+    ) -> Subscription | None:
+        result = await self.db.execute(
+            select(Subscription).where(
+                Subscription.provider == provider,
+                Subscription.provider_subscription_id == provider_subscription_id,
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            print("⚠️ No local subscription found to cancel:", provider_subscription_id)
+            return None
+
+        sub.status = SubscriptionStatus.CANCELED
+        sub.canceled_at = canceled_at
+        sub.cancel_at_period_end = True
+
+        # لو Stripe بعت آخر فترة اشتراك، حدّثها
+        if current_period_end is not None:
+            sub.current_period_end = current_period_end
+
+        await self.db.commit()
+        await self.db.refresh(sub)
+
+        result = await self.db.execute(
+            select(Subscription)
+            .where(Subscription.id == sub.id)
+            .options(
+                selectinload(Subscription.user),
+                selectinload(Subscription.plan),
+            )
+        )
+        return result.scalar_one()
+
+
+
     
 
 

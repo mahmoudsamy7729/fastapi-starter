@@ -1,6 +1,6 @@
 import pytest
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy import select, update, delete
@@ -12,9 +12,35 @@ from src.billing.models import Plan, BillingPeriod, Subscription, SubscriptionSt
 
 @pytest.fixture(autouse=True)
 def mock_save_stripe_plan(monkeypatch):
-    """Prevent real Stripe product/price creation in tests."""
-    mock = AsyncMock(return_value=None)
-    monkeypatch.setattr("src.billing.service.StripeUtils.save_stripe_plan", mock)
+    async def _save(plan):
+        plan.stripe_product_id = plan.stripe_product_id or "prod_test"
+        plan.stripe_price_id = plan.stripe_price_id or "price_test"
+        return plan
+    mock = AsyncMock(side_effect=_save)
+    monkeypatch.setattr("src.billing.service.StripeGateway.save_plan_to_stripe", mock)
+    return mock
+
+
+@pytest.fixture(autouse=True)
+def mock_create_checkout(monkeypatch):
+    mock = AsyncMock(return_value={"checkout_url": "https://stripe.test/checkout"})
+    monkeypatch.setattr("src.billing.service.StripeGateway.create_subscription_checkout_session", mock)
+    return mock
+
+
+@pytest.fixture(autouse=True)
+def mock_stripe_product_price(monkeypatch):
+    monkeypatch.setattr("src.billing.stripe_gateway.stripe.Product.update", lambda *args, **kwargs: {"id": "prod_test"})
+    monkeypatch.setattr("src.billing.stripe_gateway.stripe.Price.create", lambda *args, **kwargs: SimpleNamespace(id="price_test_new"))
+    monkeypatch.setattr("src.billing.stripe_gateway.stripe.Price.modify", lambda *args, **kwargs: None)
+
+
+@pytest.fixture(autouse=True)
+def mock_cancel_at_period_end(monkeypatch):
+    async def _cancel(sub):
+        return datetime.now(timezone.utc), sub.current_period_end
+    mock = AsyncMock(side_effect=_cancel)
+    monkeypatch.setattr("src.billing.service.StripeGateway.cancel_subscription_at_period_end", mock)
     return mock
 
 
@@ -27,11 +53,12 @@ def mock_send_subscription_email_task(monkeypatch):
     return delay_mock
 
 
-@pytest.fixture()
-def mock_checkout_url(monkeypatch):
-    mock = AsyncMock(return_value="https://stripe.test/checkout")
-    monkeypatch.setattr("src.billing.service.StripeUtils.stripe_subscripe_checkout_url", mock)
-    return mock
+@pytest.fixture(autouse=True)
+def mock_send_update_subscription_email_task(monkeypatch):
+    delay_mock = MagicMock()
+    task_mock = MagicMock(delay=delay_mock)
+    monkeypatch.setattr("src.billing.service.send_update_subscription_email_task", task_mock)
+    return delay_mock
 
 
 @pytest.fixture()
@@ -42,22 +69,23 @@ async def fake_subscription(normal_user, test_plan):
         user=normal_user,
         plan=test_plan,
         started_at=now,
-        current_period_end=now,
+        current_period_end=now + timedelta(days=30),
         cancel_at_period_end=False,
+        provider=PaymentProvider.STRIPE,
+        provider_subscription_id="sub_test",
     )
 
 
 @pytest.fixture()
 async def mock_user_subscripe(monkeypatch, fake_subscription):
     mock = AsyncMock(return_value=fake_subscription)
-    monkeypatch.setattr("src.billing.service.StripeUtils.user_subscripe", mock)
+    monkeypatch.setattr("src.billing.service.StripeGateway.user_subscripe", mock)
     return mock
 
 
 @pytest.fixture()
 async def admin_user():
     async with TestSessionDB() as session:
-
         result = await session.execute(
             select(User).where(User.email == "admin@test.com")
         )
@@ -71,11 +99,11 @@ async def admin_user():
             id=uuid4(),
             email="admin@test.com",
             username="admin_user",
-            password=hashed,          
+            password=hashed,
             is_active=True,
             is_verified=True,
             is_admin=True,
-            provider=Provider.LOCAL,        
+            provider=Provider.LOCAL,
         )
         session.add(user)
         await session.commit()
@@ -86,7 +114,6 @@ async def admin_user():
 @pytest.fixture()
 async def normal_user():
     async with TestSessionDB() as session:
-
         result = await session.execute(
             select(User).where(User.email == "normal@test.com")
         )
@@ -100,16 +127,15 @@ async def normal_user():
             id=uuid4(),
             email="normal@test.com",
             username="normal",
-            password=hashed,          
+            password=hashed,
             is_active=True,
             is_verified=True,
-            provider=Provider.LOCAL,        
+            provider=Provider.LOCAL,
         )
         session.add(user)
         await session.commit()
         await session.refresh(user)
         return user
-    
 
 
 @pytest.fixture
@@ -163,12 +189,10 @@ def plan_payload():
 @pytest.fixture
 async def test_plan():
     async with TestSessionDB() as session:
-        # Check if the plan exists
         result = await session.execute(select(Plan).where(Plan.code == "test-plan"))
         plan = result.scalar_one_or_none()
 
         if plan:
-            # Reactivate if soft-deleted
             if not plan.is_active:
                 await session.execute(
                     update(Plan).where(Plan.id == plan.id).values(is_active=True)
@@ -177,7 +201,6 @@ async def test_plan():
                 await session.refresh(plan)
             return plan
 
-        # Create plan if it does not exist
         plan = Plan(
             id=uuid4(),
             name="Test Plan",
@@ -186,6 +209,8 @@ async def test_plan():
             billing_period=BillingPeriod.MONTHLY,
             currency="USD",
             is_active=True,
+            stripe_price_id="price_test",
+            stripe_product_id="prod_test",
         )
         session.add(plan)
         await session.commit()
@@ -193,11 +218,9 @@ async def test_plan():
         return plan
 
 
-
 @pytest.fixture
 async def test_subscription(normal_user, test_plan):
     async with TestSessionDB() as session:
-        # Check if subscription exists for this user and plan
         result = await session.execute(
             select(Subscription).where(
                 Subscription.user_id == normal_user.id,
@@ -207,10 +230,14 @@ async def test_subscription(normal_user, test_plan):
         subscription = result.scalar_one_or_none()
 
         if subscription:
-            # Reactivate if canceled and reset cancel flag; ensure provider is set
-            update_values = {"status": SubscriptionStatus.ACTIVE, "cancel_at_period_end": False}
-            if subscription.provider is None:
-                update_values["provider"] = PaymentProvider.MANUAL
+            update_values = {
+                "status": SubscriptionStatus.ACTIVE,
+                "cancel_at_period_end": False,
+                "current_period_end": datetime.now(timezone.utc) + timedelta(days=30),
+                "provider": PaymentProvider.STRIPE,
+                "provider_subscription_id": subscription.provider_subscription_id or "sub_test",
+                "provider_customer_id": subscription.provider_customer_id or "cus_test",
+            }
             await session.execute(
                 update(Subscription)
                 .where(Subscription.id == subscription.id)
@@ -220,14 +247,16 @@ async def test_subscription(normal_user, test_plan):
             await session.refresh(subscription)
             return subscription
 
-        # Create new subscription
         subscription = Subscription(
             id=uuid4(),
             user_id=normal_user.id,
             plan_id=test_plan.id,
             status=SubscriptionStatus.ACTIVE,
             cancel_at_period_end=False,
-            provider=PaymentProvider.MANUAL,
+            provider=PaymentProvider.STRIPE,
+            provider_subscription_id="sub_test",
+            provider_customer_id="cus_test",
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
         )
         session.add(subscription)
         await session.commit()

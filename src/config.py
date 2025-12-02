@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from pathlib import Path
 
@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     stripe_secret_key: str = Field(default=...)
 
 
-    class Config:
-        env_file = BASE_DIR / ".env"
+    model_config = SettingsConfigDict(env_file=".env")
+
 
 
 settings = Settings()

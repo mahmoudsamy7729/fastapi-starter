@@ -30,6 +30,7 @@ async def create_plan(data: schemas.PlanCreate, plan_dep: plan_dependency, admin
     if result:
         return result
 
+
 @router.get("/plans/{plan_id}", response_model=schemas.PlanOut, status_code=status.HTTP_200_OK)
 async def get_plan(plan_id: UUID, plan_dep: plan_dependency):
     plan = await PlanService.get_plan_by_id(plan_id, plan_dep)
@@ -52,7 +53,7 @@ async def get_my_subscription(user: user_dependency, sub_dep: subscription_depen
     return subscription
 
 
-@router.post("/subscriptions/subscribe", status_code=status.HTTP_201_CREATED)
+@router.post("/subscriptions/subscribe", response_model=schemas.CheckoutUrlResponse, status_code=status.HTTP_201_CREATED)
 async def subscribe_to_plan(user: user_dependency, data: schemas.SubscribeRequest,
                 sub_dep: subscription_dependency, plan_dep: plan_dependency, user_repo: repo_dependency):
     checkout_url = await SubscriptionService.subscribe_user_to_plan(user, data.plan_code, sub_dep, plan_dep, user_repo)
@@ -65,10 +66,16 @@ async def cancel_subscription_at_end_of_period(user: user_dependency, sub_deb: s
     return subscription
 
 
+@router.post("/subscriptions/upgrade", response_model=schemas.CheckoutUrlResponse, status_code=status.HTTP_200_OK)
+async def upgrade_subscription(data: schemas.SubscribeRequest, user: user_dependency, sub_repo: subscription_dependency,
+    plan_repo: plan_dependency, user_repo: repo_dependency):
+    sub = await SubscriptionService.upgrade_subscription(user, data.plan_code, sub_repo, plan_repo, user_repo)
+    return sub
+
+
 @router.post("/stripe/webhook")
 @limiter.exempt
-async def stripe_webhook(request: Request,
-        user_repo: repo_dependency, sub_dep: subscription_dependency, plan_dep: plan_dependency,
+async def stripe_webhook(request: Request, sub_dep: subscription_dependency, plan_dep: plan_dependency,
         stripe_signature: str = Header(str)):
     await SubscriptionService.stripe_webhook(request, stripe_signature, sub_dep, plan_dep)
     return {"message": "Unhandled event"}

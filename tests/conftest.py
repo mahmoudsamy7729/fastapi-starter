@@ -1,6 +1,6 @@
 # conftest.py
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -47,7 +47,7 @@ async def client(db_session):
     if hasattr(app.state, "limiter"):
         app.state.limiter.enabled = False
 
-    async with AsyncClient(app=app, base_url="http://testserver") as ac:
+    async with AsyncClient(transport = ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
 
     app.dependency_overrides.clear()
