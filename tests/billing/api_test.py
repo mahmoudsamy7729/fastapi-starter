@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 import pytest
 from fastapi import status
 from httpx import AsyncClient
@@ -151,7 +153,7 @@ async def test_cancel_subscription(
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["cancel_at_period_end"] is True
+    assert data["cancel_at_period_end"] is False
     assert data["status"] == "canceled"
 
 
@@ -172,9 +174,7 @@ async def test_subscribe_to_plan_starts_checkout(client: AsyncClient, logged_in_
 @pytest.mark.asyncio
 async def test_stripe_webhook_checkout_triggers_email(
     client: AsyncClient,
-    mock_user_subscripe,
-    fake_subscription,
-    mock_send_subscription_email_task,
+    mock_user_subscribe,
     monkeypatch,
 ):
     event_payload = {
@@ -187,10 +187,77 @@ async def test_stripe_webhook_checkout_triggers_email(
     response = await client.post(
         "/billing/stripe/webhook",
         content=json.dumps(event_payload),
-        headers={"stripe-signature": "sig"},
+        headers={"Stripe-Signature": "sig"},
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"message": "Unhandled event"}
-    mock_user_subscripe.assert_awaited_once_with(event_payload["data"]["object"], ANY, ANY)
-    mock_send_subscription_email_task.assert_called_once_with(serialize_subscription(fake_subscription))
+    assert response.json() is True
+    mock_user_subscribe.assert_awaited_once_with(event_payload["data"]["object"], ANY, ANY)
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_invoice_payment_triggers_update_email(
+    client: AsyncClient,
+    mock_send_update_subscription_email_task,
+    monkeypatch,
+):
+    invoice = {
+        "lines": {
+            "data": [
+                {"parent": {"subscription_item_details": {"subscription": "sub_123"}}}
+            ]
+        },
+        "billing_reason": "subscription_cycle",
+        "id": "in_test",
+        "amount_paid": 5000,
+        "currency": "usd",
+    }
+    event_payload = {"type": "invoice.payment_succeeded", "data": {"object": invoice}}
+    run_mock = AsyncMock(return_value=event_payload)
+    monkeypatch.setattr("src.billing.service.run_in_threadpool", run_mock)
+
+    updated_sub = SimpleNamespace(
+        id=uuid4(),
+        user=SimpleNamespace(email="e", username="u"),
+        plan=SimpleNamespace(name="Plan", price_cents=5000),
+        started_at=datetime.now(timezone.utc),
+        current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    handle_payment_mock = AsyncMock(return_value=updated_sub)
+    monkeypatch.setattr(
+        "src.billing.service.StripeGateway.handle_invoice_payment_succeeded",
+        handle_payment_mock,
+    )
+    record_payment_mock = AsyncMock()
+    monkeypatch.setattr("src.billing.service.StripeGateway.record_invoice_payment", record_payment_mock)
+
+    response = await client.post(
+        "/billing/stripe/webhook",
+        content=json.dumps(event_payload),
+        headers={"Stripe-Signature": "sig"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() is True
+    handle_payment_mock.assert_awaited_once_with(invoice, ANY)
+    mock_send_update_subscription_email_task.assert_called_once_with(serialize_subscription(updated_sub))
+    record_payment_mock.assert_awaited_once_with(invoice, updated_sub, ANY)
+
+
+@pytest.mark.asyncio
+async def test_get_my_payments_success(client: AsyncClient, user_headers, test_payment):
+    response = await client.get("/billing/payments/me", headers=user_headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    payments = response.json()
+    assert isinstance(payments, list)
+    assert payments[0]["provider_invoice_id"] == test_payment.provider_invoice_id
+    assert payments[0]["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_get_my_payments_not_found(client: AsyncClient, user_headers, clear_user_subscriptions, clear_user_payments):
+    response = await client.get("/billing/payments/me", headers=user_headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == []

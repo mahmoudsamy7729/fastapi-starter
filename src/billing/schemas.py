@@ -60,3 +60,19 @@ class SubscribeRequest(BaseModel):
 
 class CheckoutUrlResponse(BaseModel):
     checkout_url: str
+
+
+class PaymentResponse(BaseModel):
+    id: UUID
+    subscription_id: Optional[UUID] = None
+    provider: PaymentProvider
+    provider_invoice_id: str
+    status: PaymentStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserPaymentsResponse(BaseModel):
+    payments: list[PaymentResponse]

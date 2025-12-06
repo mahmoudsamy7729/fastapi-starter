@@ -1,15 +1,16 @@
 from uuid import uuid4, UUID as PyUUID
-from enum import Enum
+from enum import Enum, IntEnum
 from datetime import timezone, datetime
 from src.database import Base
-from sqlalchemy import String, DateTime, ForeignKey, Integer, Enum as SAEnum, Boolean
+from sqlalchemy import String, DateTime, ForeignKey, Integer, Enum as SAEnum, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
 
 class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
-    TRAILAING = "trialing"
+    TRIALING = "trialing"
+    PENDING = "pending"
     CANCELED = "canceled"
     PAST_DUE = "past_due"
 
@@ -19,16 +20,21 @@ class BillingPeriod(str, Enum):
 
 
 class PaymentStatus(str, Enum):
+    SUCCEEDED = "succeeded"
     PENDING = "pending"
-    PAID = "paid"
     FAILED = "failed"
-    REFUNDED = "refunded"
 
 
 class PaymentProvider(str, Enum):
     MANUAL = "manual"
     STRIPE = "stripe"
     PAYMOB = "paymob"
+
+
+class PlanTier(IntEnum):
+    FREE = 0
+    PRO = 1
+    VIP = 2
 
 
 class Plan(Base):
@@ -43,6 +49,8 @@ class Plan(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     stripe_product_id: Mapped[str] = mapped_column(String(), nullable=True)
     stripe_price_id: Mapped[str] = mapped_column(String(), nullable=True)
+
+    tier: Mapped[PlanTier] = mapped_column(SAEnum(PlanTier), nullable=False, default=PlanTier.FREE)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                     default=lambda: datetime.now(timezone.utc))
@@ -64,7 +72,7 @@ class Subscription(Base):
     plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True),
             ForeignKey("plans.id", ondelete="CASCADE"), index=True)
     status: Mapped[SubscriptionStatus] = mapped_column(SAEnum(SubscriptionStatus))
-    provider: Mapped[str] = mapped_column(String(), nullable=False)
+    provider: Mapped[PaymentProvider] = mapped_column(SAEnum(PaymentProvider), nullable=False)
     provider_subscription_id: Mapped[str] = mapped_column(String(), nullable=True, unique=True)
     provider_customer_id: Mapped[str] = mapped_column(String(), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
@@ -79,6 +87,25 @@ class Subscription(Base):
 
 
 
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default= uuid4)
+    user_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    subscription_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"))
+    provider: Mapped[PaymentProvider] = mapped_column(SAEnum(PaymentProvider))
+    provider_invoice_id: Mapped[str] = mapped_column(String(), index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer())
+    currency: Mapped[str] = mapped_column(String(10), default="USD")
+    status: Mapped[PaymentStatus] = mapped_column(SAEnum(PaymentStatus))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                    default=lambda: datetime.now(timezone.utc))
+    
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_invoice_id",
+                         name="uq_provider_invoice_id"),
+    )
 
 
 

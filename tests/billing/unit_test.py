@@ -172,14 +172,14 @@ async def test_subscribe_user_success(monkeypatch):
 
     user_repo = Mock()
 
-    checkout_mock = AsyncMock(return_value={"checkout_url": "https://stripe.test/checkout"})
+    checkout_mock = AsyncMock(return_value="https://stripe.test/checkout")
     monkeypatch.setattr("src.billing.service.StripeGateway.create_subscription_checkout_session", checkout_mock)
 
     result = await SubscriptionService.subscribe_user_to_plan(
         user, "BASIC", sub_repo, plan_repo, user_repo
     )
 
-    assert result == {"checkout_url": "https://stripe.test/checkout"}
+    assert result == "https://stripe.test/checkout"
     checkout_mock.assert_awaited_once_with(user, plan, user_repo)
 
 
@@ -220,7 +220,7 @@ async def test_cancel_subscription_success(monkeypatch):
 
     sub_repo = Mock()
     sub_repo.get_subscription_with_access = AsyncMock(return_value=subscription)
-    sub_repo.cancel_subscription = AsyncMock(return_value=SimpleNamespace(cancel_at_period_end=True))
+    sub_repo.cancel_subscription = AsyncMock(return_value=SimpleNamespace(cancel_at_period_end=False, status="canceled"))
 
     monkeypatch.setattr(
         "src.billing.service.StripeGateway.cancel_subscription_at_period_end",
@@ -229,7 +229,7 @@ async def test_cancel_subscription_success(monkeypatch):
 
     result = await SubscriptionService.cancel_subscription_at_end_of_period(uuid4(), sub_repo)
 
-    assert result.cancel_at_period_end is True
+    assert result.cancel_at_period_end is False
     sub_repo.cancel_subscription.assert_awaited_once_with(
         provider=subscription.provider,
         provider_subscription_id=subscription.provider_subscription_id,
@@ -344,7 +344,7 @@ async def test_upgrade_subscription_no_active():
     assert exc.value.detail == "No active subscription to upgrade."
 
 
-async def test_stripe_webhook_checkout_sends_email(monkeypatch, mock_user_subscripe, fake_subscription, mock_send_subscription_email_task):
+async def test_stripe_webhook_checkout_creates_subscription(monkeypatch, mock_user_subscribe):
     event = {
         "type": "checkout.session.completed",
         "data": {"object": {"id": "cs_test", "subscription": "sub_123", "customer": "cus_123"}},
@@ -355,12 +355,12 @@ async def test_stripe_webhook_checkout_sends_email(monkeypatch, mock_user_subscr
     request = _dummy_request(b"{}")
     sub_repo = Mock()
     plan_repo = Mock()
+    payment_repo = Mock()
 
-    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, plan_repo)
+    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, plan_repo, payment_repo)
 
     assert result is None
-    mock_user_subscripe.assert_awaited_once_with(event["data"]["object"], sub_repo, plan_repo)
-    mock_send_subscription_email_task.assert_called_once_with(serialize_subscription(fake_subscription))
+    mock_user_subscribe.assert_awaited_once_with(event["data"]["object"], sub_repo, plan_repo)
 
 
 async def test_stripe_webhook_invoice_payment(monkeypatch, mock_send_update_subscription_email_task):
@@ -371,6 +371,9 @@ async def test_stripe_webhook_invoice_payment(monkeypatch, mock_send_update_subs
             ]
         },
         "billing_reason": "subscription_cycle",
+        "id": "in_test",
+        "amount_paid": 5000,
+        "currency": "usd",
     }
     event = {"type": "invoice.payment_succeeded", "data": {"object": invoice}}
     run_mock = AsyncMock(return_value=event)
@@ -383,18 +386,27 @@ async def test_stripe_webhook_invoice_payment(monkeypatch, mock_send_update_subs
         started_at=datetime.now(timezone.utc),
         current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
     )
+    handle_payment_mock = AsyncMock(return_value=updated_sub)
     monkeypatch.setattr(
         "src.billing.service.StripeGateway.handle_invoice_payment_succeeded",
-        AsyncMock(return_value=updated_sub),
+        handle_payment_mock,
+    )
+    record_payment_mock = AsyncMock()
+    monkeypatch.setattr(
+        "src.billing.service.StripeGateway.record_invoice_payment",
+        record_payment_mock,
     )
 
     request = _dummy_request(b"{}")
     sub_repo = Mock()
+    payment_repo = Mock()
 
-    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, Mock())
+    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, Mock(), payment_repo)
 
     assert result is None
+    handle_payment_mock.assert_awaited_once_with(invoice, sub_repo)
     mock_send_update_subscription_email_task.assert_called_once_with(serialize_subscription(updated_sub))
+    record_payment_mock.assert_awaited_once_with(invoice, updated_sub, payment_repo)
 
 
 async def test_stripe_webhook_subscription_deleted(monkeypatch):
@@ -407,8 +419,9 @@ async def test_stripe_webhook_subscription_deleted(monkeypatch):
 
     request = _dummy_request(b"{}")
     sub_repo = Mock()
+    payment_repo = Mock()
 
-    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, Mock())
+    result = await SubscriptionService.stripe_webhook(request, "sig", sub_repo, Mock(), payment_repo)
 
     assert result is None
     handler.assert_awaited_once_with(event["data"]["object"], sub_repo)
@@ -420,6 +433,6 @@ async def test_stripe_webhook_invalid_signature(monkeypatch):
     monkeypatch.setattr("src.billing.service.run_in_threadpool", run_mock)
 
     request = _dummy_request(b"{}")
-    response = await SubscriptionService.stripe_webhook(request, "sig", Mock(), Mock())
+    response = await SubscriptionService.stripe_webhook(request, "sig", Mock(), Mock(), Mock())
 
     assert response == {"error": "bad signature"}

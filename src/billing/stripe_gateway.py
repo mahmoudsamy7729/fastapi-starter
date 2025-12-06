@@ -4,8 +4,8 @@ from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from src.auth.models import User
 from src.auth.repository import UserRepository
-from src.billing.models import Plan, Subscription, PaymentProvider
-from src.billing.dependencies import plan_dependency, subscription_dependency
+from src.billing.models import Plan, Subscription, PaymentProvider, PaymentStatus, SubscriptionStatus
+from src.billing.repository import PlanRepository, SubscriptionRepoistory, PaymentRepository
 from src.billing.schemas import PlanUpdate
 from src.config import settings
 
@@ -46,17 +46,20 @@ class StripeGateway:
             product_update_data["name"] = update_data["name"]
 
         if product_update_data:
-            stripe.Product.update(plan.stripe_product_id, **product_update_data) #type: ignore
+            await run_in_threadpool(
+                stripe.Product.update, plan.stripe_product_id, **product_update_data) # type: ignore
+
 
          # 2️⃣ If price-related fields changed → create new price
         if any(key in update_data for key in ["price_cents", "billing_period", "currency"]):
-            new_price = stripe.Price.create(
+            new_price = await run_in_threadpool(
+                stripe.Price.create,
                 product=plan.stripe_product_id,
                 unit_amount=update_data.get("price_cents", plan.price_cents),
                 currency=update_data.get("currency", plan.currency),
                 recurring={
                     "interval": update_data.get("billing_period", plan.billing_period)
-                }
+                },
             )
             update_data["stripe_price_id"] = new_price.id
 
@@ -65,14 +68,15 @@ class StripeGateway:
         
     @staticmethod
     async def soft_delete_plan_in_stripe(plan: Plan):
-        stripe.Product.update(plan.stripe_product_id, active=False) #type: ignore
-        stripe.Price.modify(plan.stripe_price_id, active=False)
+        await run_in_threadpool(stripe.Product.update, plan.stripe_product_id, active=False)  # type: ignore
+        await run_in_threadpool(stripe.Price.modify, plan.stripe_price_id, active=False)
 
 
     @staticmethod
     async def ensure_customer(user: User, user_repo: UserRepository) -> User:
         if not user.stripe_customer_id:
-            customer = stripe.Customer.create(email=user.email)
+            customer = await run_in_threadpool(stripe.Customer.create,email=user.email,
+                metadata={"user_id": str(user.id)})
             user = await user_repo.update(user, stripe_customer_id = customer['id'])
         
         return user
@@ -110,7 +114,7 @@ class StripeGateway:
 
 
     @staticmethod
-    async def user_subscripe(session, sub_repo: subscription_dependency, plan_repo: plan_dependency) -> Subscription:
+    async def user_subscribe(session, sub_repo: SubscriptionRepoistory, plan_repo: PlanRepository) -> Subscription:
         user_id = session.get("client_reference_id")
         new_stripe_sub_id = session.get("subscription")
         customer_id = session.get("customer")
@@ -121,6 +125,9 @@ class StripeGateway:
         sub_metadata = stripe_subscription.get("metadata", {}) or {}
         old_stripe_sub_id = sub_metadata.get("upgrade_from_subscription_id")
         plan_id = sub_metadata.get("plan_id")
+        plan = await plan_repo.get_by_id(plan_id) #type: ignore
+        if not plan:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="error happened")
         if old_stripe_sub_id:
             await run_in_threadpool(
                 stripe.Subscription.delete,
@@ -132,9 +139,25 @@ class StripeGateway:
                 canceled_at=datetime.now(timezone.utc),
                 current_period_end=datetime.now(timezone.utc),
             )
-        plan = await plan_repo.get_by_id(plan_id) #type: ignore
         sub = await sub_repo.create_subscription(user_id, plan, PaymentProvider.STRIPE, new_stripe_sub_id, customer_id)
         return sub
+
+
+    @staticmethod
+    async def record_invoice_payment(invoice, subscription: Subscription, payment_repo: PaymentRepository):
+        amount_cents = invoice.get("amount_paid")
+        currency = (invoice.get("currency") or "usd").upper()
+        provider_invoice_id = invoice.get("id")
+
+        await payment_repo.create_payment(
+            user_id=subscription.user_id,
+            subscription_id=subscription.id,
+            provider=PaymentProvider.STRIPE,
+            provider_invoice_id=provider_invoice_id, #type: ignore
+            amount_cents=amount_cents, #type: ignore
+            currency=currency,
+            status=PaymentStatus.SUCCEEDED,
+        )
 
 
     @staticmethod
@@ -166,7 +189,8 @@ class StripeGateway:
 
 
     @staticmethod
-    async def handle_invoice_payment_succeeded(invoice, sub_repo: subscription_dependency):
+    async def handle_invoice_payment_succeeded(invoice, sub_repo: SubscriptionRepoistory):
+
         lines = invoice.get("lines", {}).get("data", [])
         if not lines:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no lines in invoice")
@@ -182,13 +206,13 @@ class StripeGateway:
             stripe.Subscription.retrieve,
             stripe_subscription_id,
         )
-
+        subscription_details = stripe_subscription.get("items", {}).get("data", [])
         current_period_start = datetime.fromtimestamp(
-            stripe_subscription["current_period_start"],
-            tz=timezone.utc,
-        )
+             subscription_details[0].get("current_period_start"),
+             tz=timezone.utc,
+        )    
         current_period_end = datetime.fromtimestamp(
-            stripe_subscription["current_period_end"],
+            subscription_details[0].get("current_period_end"),
             tz=timezone.utc,
         )
         sub = await sub_repo.update_subscription_period(
@@ -201,7 +225,24 @@ class StripeGateway:
     
 
     @staticmethod
-    async def handle_subscription_deleted(stripe_subscription, sub_repo: subscription_dependency):
+    async def handle_invoice_payment_failed(invoice, sub_repo: SubscriptionRepoistory):
+        lines = invoice.get("lines", {}).get("data", [])
+        if not lines:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no lines in invoice")
+        first_line = lines[0]
+        parent = first_line.get("parent", {})
+        sub_details = parent.get("subscription_item_details", {}) or {}
+        stripe_subscription_id = sub_details.get("subscription")
+        sub = await sub_repo.update_sub_status(
+            provider=PaymentProvider.STRIPE,
+            provider_subscription_id=stripe_subscription_id, #type:ignore
+            sub_status=SubscriptionStatus.PAST_DUE
+        )
+        return sub
+
+
+    @staticmethod
+    async def handle_subscription_deleted(stripe_subscription, sub_repo: SubscriptionRepoistory):
         stripe_subscription_id = stripe_subscription.get("id")
         if not stripe_subscription_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="customer.subscription.deleted without id")
@@ -211,15 +252,8 @@ class StripeGateway:
             canceled_at = datetime.fromtimestamp(canceled_at_ts, tz=timezone.utc)
         else:
             canceled_at = datetime.now(timezone.utc)
-
-        current_period_end_ts = stripe_subscription.get("current_period_end")
-        current_period_end = None
-        if current_period_end_ts:
-            current_period_end = datetime.fromtimestamp(
-                current_period_end_ts,
-                tz=timezone.utc,
-            )
-
+        
+        current_period_end = datetime.now(timezone.utc)
          #Current period end changes to now so user has no access to the deleted plan
 
         sub = await sub_repo.cancel_subscription(
@@ -234,3 +268,4 @@ class StripeGateway:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No local subscription found")
 
         return sub
+    
