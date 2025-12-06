@@ -1,17 +1,11 @@
-import stripe
-import json
-from fastapi.concurrency import run_in_threadpool
 from uuid import UUID
 from src.rate_limiter import limiter
 from fastapi import APIRouter, status, Request, Header
-from src.billing.service import PlanService, SubscriptionService
+from src.billing.service import PlanService, SubscriptionService, PaymentService
 from src.billing import schemas
-from src.billing.dependencies import plan_dependency, subscription_dependency
+from src.billing.dependencies import plan_dependency, subscription_dependency, payment_dependency
 from src.auth.dependencies import repo_dependency
 from src.auth_bearer import  user_dependency, admin_user_dependency
-from src.billing.tasks import send_subscription_email_task
-from src.billing.utils import serialize_subscription
-from src.config import settings
 
 
 
@@ -47,6 +41,13 @@ async def update_plan(plan_id: UUID, data: schemas.PlanUpdate, plan_dep: plan_de
     return await PlanService.update_plan(plan_id, data, plan_dep)
 
 
+
+@router.get("/payments/me", response_model=list[schemas.PaymentResponse], status_code=status.HTTP_200_OK)
+async def get_my_payments(user: user_dependency, payment_deb: payment_dependency):
+    payments = await PaymentService.get_my_payments(user, payment_deb)
+    return payments
+
+
 @router.get("/subscriptions/me", response_model=schemas.SubscriptionOut, status_code=status.HTTP_200_OK)
 async def get_my_subscription(user: user_dependency, sub_dep: subscription_dependency):
     subscription = await SubscriptionService.get_user_subscription(user.id, sub_dep)
@@ -57,7 +58,7 @@ async def get_my_subscription(user: user_dependency, sub_dep: subscription_depen
 async def subscribe_to_plan(user: user_dependency, data: schemas.SubscribeRequest,
                 sub_dep: subscription_dependency, plan_dep: plan_dependency, user_repo: repo_dependency):
     checkout_url = await SubscriptionService.subscribe_user_to_plan(user, data.plan_code, sub_dep, plan_dep, user_repo)
-    return checkout_url
+    return {"checkout_url":checkout_url}
 
 
 @router.post("/subscriptions/cancel", response_model=schemas.SubscriptionOut, status_code=status.HTTP_200_OK)
@@ -76,9 +77,9 @@ async def upgrade_subscription(data: schemas.SubscribeRequest, user: user_depend
 @router.post("/stripe/webhook")
 @limiter.exempt
 async def stripe_webhook(request: Request, sub_dep: subscription_dependency, plan_dep: plan_dependency,
-        stripe_signature: str = Header(str)):
-    await SubscriptionService.stripe_webhook(request, stripe_signature, sub_dep, plan_dep)
-    return {"message": "Unhandled event"}
+        payment_dep: payment_dependency, stripe_signature: str = Header(..., alias="Stripe-Signature")):
+    await SubscriptionService.stripe_webhook(request, stripe_signature, sub_dep, plan_dep, payment_dep)
+    return True
 
 
 

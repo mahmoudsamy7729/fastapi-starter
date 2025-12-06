@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from src.billing.models import Subscription, SubscriptionStatus
+from src.billing.models import Subscription
 
 
 

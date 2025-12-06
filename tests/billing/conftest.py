@@ -7,7 +7,7 @@ from sqlalchemy import select, update, delete
 from src.hashing import hash_password
 from tests.conftest import TestSessionDB
 from src.auth.models import User, Provider
-from src.billing.models import Plan, BillingPeriod, Subscription, SubscriptionStatus, PaymentProvider
+from src.billing.models import Plan, BillingPeriod, Subscription, SubscriptionStatus, PaymentProvider, Payment, PaymentStatus
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +23,7 @@ def mock_save_stripe_plan(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def mock_create_checkout(monkeypatch):
-    mock = AsyncMock(return_value={"checkout_url": "https://stripe.test/checkout"})
+    mock = AsyncMock(return_value="https://stripe.test/checkout")
     monkeypatch.setattr("src.billing.service.StripeGateway.create_subscription_checkout_session", mock)
     return mock
 
@@ -73,13 +73,14 @@ async def fake_subscription(normal_user, test_plan):
         cancel_at_period_end=False,
         provider=PaymentProvider.STRIPE,
         provider_subscription_id="sub_test",
+        provider_customer_id="cus_test",
     )
 
 
 @pytest.fixture()
-async def mock_user_subscripe(monkeypatch, fake_subscription):
+async def mock_user_subscribe(monkeypatch, fake_subscription):
     mock = AsyncMock(return_value=fake_subscription)
-    monkeypatch.setattr("src.billing.service.StripeGateway.user_subscripe", mock)
+    monkeypatch.setattr("src.billing.service.StripeGateway.user_subscribe", mock)
     return mock
 
 
@@ -265,11 +266,45 @@ async def test_subscription(normal_user, test_plan):
 
 
 @pytest.fixture()
+async def test_payment(normal_user, test_subscription):
+    async with TestSessionDB() as session:
+        result = await session.execute(
+            select(Payment).where(Payment.user_id == normal_user.id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment:
+            return payment
+
+        payment = Payment(
+            id=uuid4(),
+            user_id=normal_user.id,
+            subscription_id=test_subscription.id,
+            provider=PaymentProvider.STRIPE,
+            provider_invoice_id="inv_test",
+            amount_cents=5000,
+            currency="USD",
+            status=PaymentStatus.SUCCEEDED,
+        )
+        session.add(payment)
+        await session.commit()
+        await session.refresh(payment)
+        return payment
+
+
+@pytest.fixture()
 async def clear_user_subscriptions(normal_user):
     async with TestSessionDB() as session:
         await session.execute(
             delete(Subscription).where(Subscription.user_id == normal_user.id)
         )
+        await session.commit()
+    return normal_user
+
+
+@pytest.fixture()
+async def clear_user_payments(normal_user):
+    async with TestSessionDB() as session:
+        await session.execute(delete(Payment).where(Payment.user_id == normal_user.id))
         await session.commit()
     return normal_user
 

@@ -2,11 +2,10 @@ import stripe
 from uuid import UUID
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-
 from src.config import settings
 from src.billing import schemas
 from src.billing.models import PaymentProvider
-from src.billing.repository import PlanRepository, SubscriptionRepoistory
+from src.billing.repository import PlanRepository, SubscriptionRepoistory, PaymentRepository
 from src.billing.tasks import send_subscription_email_task, send_update_subscription_email_task
 from src.billing.utils import serialize_subscription
 from src.billing.stripe_gateway import StripeGateway
@@ -69,6 +68,7 @@ class PlanService:
         if not plan.is_active:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Plan already deleted.")
        
+        await StripeGateway.soft_delete_plan_in_stripe(plan)
         await repo.soft_delete(plan)
     
 
@@ -147,7 +147,7 @@ class SubscriptionService:
 
     @staticmethod
     async def stripe_webhook(request, stripe_signature, sub_repo: SubscriptionRepoistory,
-        plan_repo: PlanRepository):
+        plan_repo: PlanRepository, payment_repo: PaymentRepository):
         payload = await request.body()
         try:
             event = await run_in_threadpool(
@@ -163,21 +163,36 @@ class SubscriptionService:
         data_object = event["data"]["object"]
 
         if event_type == "checkout.session.completed":
-            # create subscription in DB
             session = data_object
-            sub = await StripeGateway.user_subscripe(session, sub_repo, plan_repo)
-            send_subscription_email_task.delay(serialize_subscription(sub)) #type: ignore
+            sub = await StripeGateway.user_subscribe(session, sub_repo, plan_repo)
+            
+            
         
         if event_type == "invoice.payment_succeeded":
-            #Renew the subscription in the db
             invoice = data_object
             billing_reason = invoice.get("billing_reason")
+            sub = await StripeGateway.handle_invoice_payment_succeeded(invoice, sub_repo)
+            await StripeGateway.record_invoice_payment(invoice, sub, payment_repo)
             if billing_reason == "subscription_cycle":
-                sub = await StripeGateway.handle_invoice_payment_succeeded(invoice, sub_repo)
                 send_update_subscription_email_task.delay(serialize_subscription(sub)) #type: ignore
+            elif billing_reason == "subscription_create":
+                send_subscription_email_task.delay(serialize_subscription(sub)) #type: ignore
 
 
         if event_type == "customer.subscription.deleted":
             stripe_subscription = data_object
             await StripeGateway.handle_subscription_deleted(stripe_subscription, sub_repo)
 
+        
+        if event_type == "invoice.payment_failed":
+            invoice = data_object
+            
+            await StripeGateway.handle_invoice_payment_failed(invoice, sub_repo)
+
+
+
+class PaymentService:
+    @staticmethod
+    async def get_my_payments(user: User, payment_repo: PaymentRepository):
+        payments = await payment_repo.get_my_payments(user.id)
+        return payments

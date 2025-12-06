@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.billing.models import Plan, Subscription, SubscriptionStatus, BillingPeriod
+from src.billing.models import Plan, Subscription, SubscriptionStatus, BillingPeriod, PaymentStatus, Payment, PaymentProvider
 
 
 class PlanRepository:
@@ -97,28 +97,23 @@ class SubscriptionRepoistory:
 
     async def create_subscription(self, user_id: UUID, plan: Plan, provider: str, 
             provider_subscription_id: str, provider_customer_id: str) -> Subscription:
-        old_sub = await self.get_active_for_user(user_id)
+        old_sub = await self.get_subscription_with_access(user_id)
         if old_sub:
             old_sub.status = SubscriptionStatus.CANCELED
 
         now = datetime.now(timezone.utc)
-        period_delta = (
-            timedelta(days=30)
-            if plan.billing_period == BillingPeriod.MONTHLY
-            else timedelta(days=365)
-        )
 
         sub = Subscription(
             user_id=user_id,
             plan_id=plan.id,
-            status=SubscriptionStatus.ACTIVE,
+            status=SubscriptionStatus.PAST_DUE,
             # provider fields
             provider=provider,
             provider_subscription_id=provider_subscription_id,
             provider_customer_id=provider_customer_id,
 
             started_at=now,
-            current_period_end=now + period_delta,
+            current_period_end=now,
         )
 
         self.db.add(sub)
@@ -156,7 +151,7 @@ class SubscriptionRepoistory:
         provider: str,
         provider_subscription_id: str,
         current_period_start: datetime,
-        current_period_end: datetime
+        current_period_end: datetime,
     ) -> Subscription | None:
         result = await self.db.execute(
             select(Subscription).where(
@@ -166,7 +161,6 @@ class SubscriptionRepoistory:
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            print("⚠️ No local subscription found for stripe_subscription_id:", provider_subscription_id)
             return None
 
         sub.status = SubscriptionStatus.ACTIVE  
@@ -206,9 +200,8 @@ class SubscriptionRepoistory:
 
         sub.status = SubscriptionStatus.CANCELED
         sub.canceled_at = canceled_at
-        sub.cancel_at_period_end = True
 
-        # لو Stripe بعت آخر فترة اشتراك، حدّثها
+        
         if current_period_end is not None:
             sub.current_period_end = current_period_end
 
@@ -226,7 +219,74 @@ class SubscriptionRepoistory:
         return result.scalar_one()
 
 
+    async def update_sub_status(
+            self,
+        provider: str,
+        provider_subscription_id: str,
+        sub_status: SubscriptionStatus,
+    ):
+        result = await self.db.execute(
+            select(Subscription).where(
+                Subscription.provider == provider,
+                Subscription.provider_subscription_id == provider_subscription_id,
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub or sub.status == SubscriptionStatus.CANCELED:
+            return None
+        
+        sub.status = sub_status  
+        await self.db.commit()
+        await self.db.refresh(sub)
+        result = await self.db.execute(
+        select(Subscription)
+        .where(Subscription.id == sub.id)
+        .options(
+                selectinload(Subscription.user),
+                selectinload(Subscription.plan),
+            )
+        )
+        return result.scalar_one()
+        
 
+
+class PaymentRepository:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+
+    async def create_payment(self,
+        *,
+        user_id: UUID,
+        subscription_id: UUID | None,
+        provider_invoice_id: str,
+        amount_cents: int,
+        currency: str,
+        status: PaymentStatus,
+        provider: PaymentProvider = PaymentProvider.STRIPE,
+    ) -> Payment:
+        
+        payment = Payment(
+            user_id=user_id,
+            subscription_id=subscription_id,
+            provider=provider,
+            provider_invoice_id=provider_invoice_id,
+            amount_cents=amount_cents,
+            currency=currency,
+            status=status,
+        )
+        self.db.add(payment)
+        await self.db.commit()
+        await self.db.refresh(payment)
+        return payment
     
 
+    async def get_my_payments(self, user_id: UUID) -> list[Payment]:
+        stmt = (
+            select(Payment)
+            .where(Payment.user_id == user_id)
+            .order_by(Payment.created_at.desc())
+        )
 
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
