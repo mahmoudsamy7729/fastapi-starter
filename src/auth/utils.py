@@ -3,7 +3,6 @@ from urllib.parse import urlencode
 from uuid import UUID
 from datetime import datetime, timedelta, UTC
 from fastapi import HTTPException, status
-from fastapi.concurrency import run_in_threadpool
 from src.hashing import hash_password
 from src.auth.models import LoginCode
 from src.config import settings

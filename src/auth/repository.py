@@ -1,7 +1,7 @@
 from uuid import UUID
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth.models import User, Profile, LoginCode
+from src.auth.models import User, LoginCode
 
 class UserRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -32,9 +32,6 @@ class UserRepository:
     async def create(self, user: User) -> User: 
         self.db.add(user)
         await self.db.flush()  
-            
-        profile = Profile(user_id=user.id)
-        self.db.add(profile)
 
         await self.db.commit()
         await self.db.refresh(user)
@@ -50,25 +47,7 @@ class UserRepository:
         await self.db.commit()
         await self.db.refresh(user)
         return user
-    
-
-
-class ProfileReposiotry:
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
-
-
-    async def get_by_user_id(self, user_id: UUID):
-        pass
-
-
-    async def update(self, profile: Profile, **kwargs):
-        for key, value in kwargs.items():
-            setattr(profile, key, value)
-
-        await self.db.commit()
-        await self.db.refresh(profile)
-        return profile        
+     
 
 
 class LoginCodeRepository:
