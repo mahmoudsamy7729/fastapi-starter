@@ -31,25 +31,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                 default=lambda: datetime.now(timezone.utc),onupdate=lambda: datetime.now(timezone.utc))
     
-    profile = relationship("Profile", back_populates="user", uselist=False)
     subscriptions = relationship("Subscription", back_populates="user")
-
-
-class Profile(Base):
-    __tablename__ = "profiles"
-
-    id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
-    first_name: Mapped[str] = mapped_column(String(255), nullable=True)
-    last_name: Mapped[str] = mapped_column(String(255), nullable=True)
-    profile_img: Mapped[str] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
-                                    default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
-                default=lambda: datetime.now(timezone.utc),onupdate=lambda: datetime.now(timezone.utc))
-    
-
-    user = relationship("User", back_populates="profile")
 
 
 class LoginCode(Base):

@@ -1,150 +1,116 @@
-# FastAPI Authentication System  
-### JWT Access/Refresh Tokens • Rotation • OAuth (Google & GitHub) • OTP Login • Email Verification
 
-A high-security authentication system built with **FastAPI**, featuring:
+# FastAPI Authentication & Billing Service
 
-- 🔐 JWT Access/Refresh Tokens  
-- 🔁 **Secure Refresh Token Rotation (DB-backed)**  
-- 📧 Email Verification & Password Reset  
-- 🔑 Google OAuth2 & GitHub OAuth2  
-- 🔢 One-Time Password (OTP) Login  
-- 🧵 Async Architecture + CPU-bound hashing in ThreadPool  
-- 🗃️ Repository Pattern + Service Layer  
-- ⚙️ Environment-based configuration  
-- 📦 Fully modular & production-ready structure
-- 
--
+A FastAPI backend that provides login/registration, OAuth, OTP, email verification, and Stripe-based subscriptions. It runs async with PostgreSQL, Redis, and Celery so you can plug it into a SaaS dashboard or API-first product.
 
----
+## Technical Overview
+- FastAPI app with per-domain routers (`src/auth/router.py`, `src/billing/router.py`), CORS, structured logging, and slowapi rate limiting.
+- Service/repository layers over async SQLAlchemy 2.0 + asyncpg; sync engine for Celery tasks.
+- JWT access, refresh, and validation tokens with hashed refresh storage and rotation.
+- Stripe Checkout + webhook handling for plans, subscriptions, renewals, and cancellations.
+- SMTP email flows (verification, password reset, OTP, subscription notices) via FastAPI-Mail.
+- Celery worker and beat for subscription emails and expiry sweeps.
 
-## 🚀 Features
+## Main Features
+- Local auth: register/login, email verification, password reset/change.
+- OTP login (email-delivered, single-use, 15-minute expiry).
+- Social auth: Google and GitHub with state validation and auto-provisioning.
+- Refresh token rotation with DB-backed JTI tracking and httpOnly cookies.
+- Plans: create/update/soft-delete, tiering, and Stripe product/price sync.
+- Subscriptions: checkout, upgrade, cancel-at-period-end, and access window enforcement.
+- Stripe webhooks: checkout completion, invoice success/failure, subscription deleted.
+- Payments recorded on invoice success; subscription emails dispatched via Celery.
+- Rate limiting (default 5/min) and request logging for observability.
 
-### 🔐 **JWT Authentication**
-- Access Token (short-lived)
-- Refresh Token (long-lived)
-- Rotation logic (old token revoked → new token issued)
-- Refresh tokens stored securely in DB (hashed)
-- All tokens include `jti` for tracking
+## Technology Stack
+- Python 3.12+, FastAPI, Starlette, Pydantic v2
+- Async SQLAlchemy + asyncpg (PostgreSQL), Alembic migrations
+- JWT via python-jose; Argon2 hashing (passlib)
+- Stripe Python SDK
+- Redis broker; Celery worker and beat
+- FastAPI-Mail (SMTP + Jinja templates)
+- slowapi for rate limiting; loguru for logging
 
-### 🔁 **Refresh Token Rotation**
-- Detect invalid/expired/unknown refresh tokens
-- Revoke old token after issuing new one
-- Delete all previous tokens on login (single-session mode)
-
-### 🔑 **OAuth 2.0**
-- Google Login
-- GitHub Login
-- Secure `state` verification
-- Cookie-based refresh token storage
-
-### 🔢 **OTP Login**
-- Generate 6-digit OTP
-- Store hashed OTP in database
-- Auto-expiration
-- Login with email + OTP
-
-### 📧 **Email Flows**
-- Email verification
-- Password reset
-- Welcome email
-- SMTP via FastMail
-
-### 🧵 **Async Backend**
-- Async SQLAlchemy (asyncpg)
-- Async HTTPX for OAuth
-- run_in_threadpool for heavy hashing
-
----
-
-## 🛠️ Tech Stack
-
-### **Backend**
-- FastAPI 
+## Requirements
 - Python 3.12+
-- SQLAlchemy 2.0 (async) 
-- asyncpg (PostgreSQL driver)
-- Pydantic v2
-- Passlib + Argon2 for password hashing 
-- HTTPX (async OAuth & API calls) 
-- FastAPI-Mail (SMTP integration)
+- PostgreSQL (DATABASE_URL) and a sync URL for Celery (SYNC_DATABASE_URL)
+- Redis 7+ for rate limiting and Celery broker
+- Stripe keys (public, secret, webhook signing)
+- SMTP credentials for transactional emails
+- Google and GitHub OAuth credentials
+- Optional: Docker and docker-compose for local orchestration
 
-### **Auth**
-- python-jose (JWT) 
-- Google OAuth
-- GitHub OAuth
+## Installation
+1. Create and activate a virtualenv:
+   ```bash
+   python -m venv .venv
+   .\.venv\Scripts\activate  # on Windows
+   # source .venv/bin/activate on Linux/macOS
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements/requirements.txt
+   ```
+   (For dev-only pins you can also use `requirements/devlopment.txt`.)
+3. Copy `.env.example` to `.env` and fill in all values (see Environment Variables below).
+4. Create the PostgreSQL databases referenced by `DATABASE_URL`, `SYNC_DATABASE_URL`, and `TEST_DATABASE_URL`.
+5. Run migrations:
+   ```bash
+   alembic upgrade head
+   ```
 
-### **Utilities**
-- python-dotenv 
-- Alembic (database migrations) 
-- Uvicorn (server)
+## Environment Variables
+Key settings loaded via `src/config.py`:
+- App: `APP_NAME`, `APP_ENV`, `APP_DEBUG`, `APP_URL`
+- Database: `DATABASE_URL`, `SYNC_DATABASE_URL` (used by Celery), `TEST_DATABASE_URL`
+- JWT: `ALGORITHM`, `ACCESS_SECRET_KEY`, `ACCESS_TOKEN_EXPIRE`, `REFRESH_SECRET_KEY`, `REFRESH_TOKEN_EXPIRE`, `VALIDATION_SECRET_KEY`, `VALIDATION_TOKEN_EXPIRE`
+- Mail: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+- OAuth (Google): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_AUTH_URL`, `GOOGLE_TOKEN_URL`, `GOOGLE_USERINFO_URL`
+- OAuth (GitHub): `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI`, `GITHUB_AUTHORIZE_URL`, `GITHUB_TOKEN_URL`, `GITHUB_USER_API`, `GITHUB_EMAILS`
+- Infrastructure: `REDIS_URL`, `CELERY_WORKER_URL`, `CELERY_BEAT_URL`
+- Stripe: `STRIPE_PUBLIC_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 
----
+## Running (Development)
+1. Ensure PostgreSQL and Redis are running.
+2. Start the API:
+   ```bash
+   uvicorn src.main:app --reload
+   ```
+3. Start Celery worker and beat (separate shells):
+   ```bash
+   celery -A src.celery_app.celery_app worker --loglevel=info
+   celery -A src.celery_app.beat_app beat --loglevel=info
+   ```
+4. Configure your SMTP sandbox so email flows (verification/reset/OTP/subscription) can send.
 
-## 🏃 Running the Project
+## Running (Production)
+- Set `APP_DEBUG=False`, tighten CORS, and set cookie `secure=True` in the auth router.
+- Provide HTTPS termination (e.g., Nginx in front of Uvicorn/Gunicorn workers).
+- Run workers with process managers (systemd/supervisor) or containers.
+- Validate Stripe webhook signature with `STRIPE_WEBHOOK_SECRET` and expose the webhook URL publicly.
+- Docker Compose option:
+  ```bash
+  docker-compose up --build
+  ```
+  Services: `api`, `db` (Postgres), `redis`, `celery`, `celery_beat`, and `pgadmin`.
 
-### 1. Install dependencies
-```bash
-pip install -r requirements/development.txt
-alembic upgrade head
-uvicorn src.main:app --reload
+## Tests
+- Set `TEST_DATABASE_URL` to a dedicated database.
+- Run all tests with:
+  ```bash
+  pytest
+  ```
+  Tests spin up schema automatically, disable the rate limiter, and use httpx ASGI client fixtures. Mock Stripe/email in new tests to avoid real calls.
 
-```
+## Short API Overview
+- Auth: `/register`, `/login`, `/refresh-token`, `/verify`, `/request/verify`, `/forget-password`, `/new-password`, `/change-password`, `/request/login-code`, `/login/code`, `/google/login` + callback, `/github/login` + callback, `/deactivate`.
+- Billing: `/billing/plans` (list/create), `/billing/plans/{id}` (get/update/delete), `/billing/subscriptions/me`, `/billing/subscriptions/subscribe`, `/billing/subscriptions/upgrade`, `/billing/subscriptions/cancel`, `/billing/payments/me`, `/billing/stripe/webhook`.
 
----
+## Contribution Guidelines
+- Fork/branch, keep PRs focused, and update docs when behaviors change.
+- Add/adjust tests (pytest) for any new logic; mock external providers.
+- Run `alembic upgrade head` and `pytest` before pushing.
+- Use clear commit messages and reference relevant modules/paths.
 
-## 🔁 Refresh Token Rotation (Flow)
-
-1. User logs in → access & refresh token are generated  
-2. Refresh token is stored **hashed** in the database  
-3. User requests `/refresh/token`  
-4. Backend verifies the JWT signature  
-5. Extracts the `jti` from the refresh token  
-6. Fetches the token row from the database  
-7. Validates that the token:  
-   - exists  
-   - is not revoked  
-   - is not expired  
-8. Issues a new access token + new refresh token  
-9. Revokes the old refresh token (rotation)  
-10. Stores the new refresh token in the database  
-11. Returns new access token + sets new refresh cookie
-
----
-
-## 🔑 OAuth Flow (Google / GitHub)
-
-1. Redirect user to provider login page  
-2. User authorizes the application  
-3. Provider sends back a `code` + `state`  
-4. Backend validates the `state` (CSRF protection)  
-5. Exchanges the `code` for an access token  
-6. Uses provider access token to fetch user profile  
-7. Creates the user in DB if not existing  
-8. Generates JWT access & refresh tokens  
-9. Stores refresh token in DB  
-10. Sets refresh cookie + returns access token
-
----
-
-## 📧 OTP Login Flow
-
-1. User enters email  
-2. Backend generates a 6-digit OTP  
-3. OTP is hashed and stored in the database  
-4. OTP is emailed to the user  
-5. User submits the OTP  
-6. Backend verifies the hashed OTP  
-7. If valid → generate access & refresh tokens  
-8. Delete OTP after successful login  
-9. Set refresh cookie + return access token
-
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** — free for personal and commercial use.
-
-
-
-
+## License
+MIT-style licensing (check repository for the full text).
