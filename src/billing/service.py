@@ -1,4 +1,5 @@
 import stripe
+import logging
 from uuid import UUID
 from fastapi import HTTPException, status
 from fastapi.concurrency import run_in_threadpool
@@ -6,13 +7,14 @@ from src.config import settings
 from src.billing import schemas
 from src.billing.models import PaymentProvider
 from src.billing.repository import PlanRepository, SubscriptionRepoistory, PaymentRepository
-from src.billing.tasks import send_subscription_email_task, send_update_subscription_email_task
+from src.billing.tasks import send_subscription_email_task, send_update_subscription_email_task, send_cancel_subscription_email_task, send_payment_failed_email_task
 from src.billing.utils import serialize_subscription
 from src.billing.stripe_gateway import StripeGateway
 from src.auth.models import User
 from src.auth.repository import UserRepository
 
 
+logger = logging.getLogger(__name__)
 stripe.api_key = settings.stripe_secret_key
 
 
@@ -181,13 +183,19 @@ class SubscriptionService:
 
         if event_type == "customer.subscription.deleted":
             stripe_subscription = data_object
-            await StripeGateway.handle_subscription_deleted(stripe_subscription, sub_repo)
+            sub = await StripeGateway.handle_subscription_deleted(stripe_subscription, sub_repo)
+            try:
+                send_cancel_subscription_email_task.delay(serialize_subscription(sub))
+            except Exception as exc:
+                logger.exception("Failed to enqueue cancel subscription email", exc_info=exc)
 
         
         if event_type == "invoice.payment_failed":
             invoice = data_object
             
-            await StripeGateway.handle_invoice_payment_failed(invoice, sub_repo)
+            sub = await StripeGateway.handle_invoice_payment_failed(invoice, sub_repo)
+            if sub:
+                send_payment_failed_email_task.delay(serialize_subscription(sub))
 
 
 
