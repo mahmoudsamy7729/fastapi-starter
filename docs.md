@@ -1,138 +1,106 @@
-﻿# docs.md
-# Project Documentation
 
-## Overview
-FastAPI-based authentication and billing service with JWT access/refresh tokens, OAuth (Google/GitHub), OTP login, email flows, plan/subscription management, and Stripe billing integration. Async-first architecture uses SQLAlchemy 2.0 async ORM, Celery for background jobs, Redis as broker, and PostgreSQL as the primary datastore.
+# Technical Documentation
 
-## Architecture
-- API layer: FastAPI app (`src/main.py`) with routers per domain (`src/auth/router.py`, `src/billing/router.py`).
-- Services: Business logic in `src/auth/service.py` and `src/billing/service.py`.
-- Repositories: Data access layer for each aggregate (`src/repository.py`, `src/auth/repository.py`, `src/billing/repository.py`).
-- Models: SQLAlchemy models (`src/auth/models.py`, `src/billing/models.py`, `src/models.py`).
-- Utilities: JWT, hashing, email, rate limiting, logging, and Stripe gateway helpers.
-- Background workers: Celery app (`src/celery_app.py`) with worker and beat; beat schedules subscription expiry checks.
-- Tests: Pytest + httpx ASGI client with DB overrides in `tests/`.
+## System Overview
+An async FastAPI application that handles authentication and Stripe-backed subscription billing. It uses SQLAlchemy for data access, Stripe Checkout for payments, and Celery (with Redis) for background jobs such as subscription emails and expiry sweeps.
 
-## Folder Structure (key paths)
-- `src/main.py` – FastAPI app wiring, middleware, routers.
-- `src/config.py` – Pydantic settings loader from `.env`.
-- `src/database.py` – Async engine/session + sync engine for Celery tasks.
-- `src/auth/*` – Auth domain (models, schemas, service, router, OAuth/OTP utils, emails).
-- `src/billing/*` – Billing domain (models, schemas, service, router, Stripe gateway, Celery tasks/emails).
-- `src/tasks.py` – Placeholder Celery task (subscription expiry TODO).
-- `src/celery_app.py` – Celery worker/beat setup.
-- `templates/email/` – Jinja email templates (verify, reset, OTP, subscription).
-- `alembic/` – Migration scripts (schema + seeds).
-- `tests/` – API + unit tests for auth and billing with fixtures.
-- `requirements/` – Runtime and dev dependency pins.
-- `docker-compose.yml`, `Dockerfile` – Container orchestration for API, Postgres, Redis, Celery, pgAdmin.
+## Architecture Overview
+- Entry point: `src/main.py` wires routers, CORS, slowapi rate limiting, request logging, and validation error handling.
+- Routing: `src/auth/router.py` and `src/billing/router.py` expose the API surface. Dependencies inject repositories/services and enforce auth/admin checks.
+- Services: Business rules live in `src/auth/service.py` and `src/billing/service.py`.
+- Repositories: Data access layer (`src/repository.py`, `src/auth/repository.py`, `src/billing/repository.py`) built on async SQLAlchemy sessions.
+- Data models: `src/auth/models.py`, `src/billing/models.py`, `src/models.py` define tables for users, profiles, plans, subscriptions, payments, refresh tokens, and OTP codes.
+- Utilities: JWT handling (`src/jwt.py`), hashing (`src/hashing.py`), email config (`src/utils.py`), rate limiting (`src/rate_limiter.py`), logging (`src/logging.py`), and OAuth/OTP helpers (`src/auth/utils.py`).
+- Background work: Celery worker/beat in `src/celery_app.py` with tasks in `src/billing/tasks.py` and placeholder `src/tasks.py`.
+- Templates: Jinja email templates under `templates/email/` for verification, reset, OTP, and subscription emails.
+- Infrastructure: Docker Compose for API, Postgres, Redis, Celery worker/beat, and pgAdmin.
 
-## Technology Stack
-- Framework: FastAPI, Starlette, Pydantic v2.
-- ORM/DB: SQLAlchemy 2.0 async, asyncpg, PostgreSQL; Alembic migrations.
-- Auth: python-jose JWT, HTTPBearer security, Argon2 hashing (passlib).
-- Async/Concurrency: run_in_threadpool for CPU-bound/hash/Stripe calls.
-- Background jobs: Celery worker/beat, Redis broker.
-- Rate limiting: slowapi (5/min default, key = Authorization header or IP).
-- Email: fastapi-mail with SMTP + Jinja templates.
-- Payments: Stripe SDK.
-- Testing: pytest, pytest-asyncio, httpx AsyncClient.
+## Request Lifecycle
+1. FastAPI receives the request, rate limiting runs via slowapi, and CORS headers are applied.
+2. Router-level dependencies resolve repositories and current user/admin guards (`src/auth_bearer.py`).
+3. Service methods apply business rules and call repositories to read/write Postgres.
+4. Token/cookie handling occurs at the router layer for login/refresh/OAuth flows.
+5. Responses return Pydantic schemas; validation errors use a custom handler returning `{errors: {field: message}}`.
 
-## Configuration & Environment
-Loaded via `src/config.py` (`.env` or env vars). Key variables (see `.env.example`):
-- App: `APP_NAME`, `APP_ENV`, `APP_DEBUG`, `APP_URL`
-- DB: `DATABASE_URL`, `SYNC_DATABASE_URL`, `TEST_DATABASE_URL`
-- JWT: `ALGORITHM`, `ACCESS_SECRET_KEY`, `ACCESS_TOKEN_EXPIRE`, `REFRESH_SECRET_KEY`, `REFRESH_TOKEN_EXPIRE`, `VALIDATION_SECRET_KEY`, `VALIDATION_TOKEN_EXPIRE`
-- Mail: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
-- OAuth Google: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_AUTH_URL`, `GOOGLE_TOKEN_URL`, `GOOGLE_USERINFO_URL`
-- OAuth GitHub: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI`, `GITHUB_AUTHORIZE_URL`, `GITHUB_TOKEN_URL`, `GITHUB_USER_API`, `GITHUB_EMAILS`
-- Infra: `REDIS_URL`, `CELERY_WORKER_URL`, `CELERY_BEAT_URL`
-- Stripe: `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLIC_KEY`, `STRIPE_SECRET_KEY`
+## Authentication Domain
+- **Registration & Profiles**: `UserService.register_user` validates unique email/username, hashes passwords, and auto-creates an empty `Profile` via `UserRepository.create`.
+- **Login (password)**: Verifies Argon2 hash, issues access/refresh JWTs (`src/jwt.py`), stores hashed refresh token with JTI in `refresh_tokens` (rotation enforced), and sets httpOnly cookie.
+- **Refresh rotation**: `/refresh-token` verifies JWT, looks up JTI in DB, validates non-revoked/non-expired, issues new tokens, revokes old, and stores new hashed refresh token.
+- **Email verification**: Validation token generated by `validation_secret_key`; `/verify` marks `is_verified`; `/request/verify` resends via BackgroundTasks.
+- **Password reset/change**: Reset token emailed via `send_password_reset_email`; `/new-password` updates hash; `/change-password` checks old password for authenticated users.
+- **OTP login**: `/request/login-code` creates hashed code (`LoginCodeRepository`), emails it; `/login/code` verifies against latest, enforces expiry, deletes on use, and issues tokens.
+- **OAuth (Google/GitHub)**: State cookie set on login endpoints; callback exchanges code for token (`auth/utils.py`), fetches profile/email, auto-provisions user with provider flag, and issues tokens.
+- **Account deactivation**: `/deactivate` marks `is_active=False`; further access is blocked by auth dependency checks.
+- **Access control**: `auth_bearer.py` enforces active/verified users and admin-only routes for plan management.
 
-## Database Models
-- User (`users`): id (UUID), email, username, password (nullable for social), is_admin, is_active, is_verified, stripe_customer_id, provider enum, timestamps; relations: profile, subscriptions, refresh_tokens.
-- Profile (`profiles`): user_id unique FK, first/last name, profile_img, timestamps.
-- LoginCode (`login_codes`): user_id FK cascade, code_hash, created_at, expires_at.
-- RefreshToken (`refresh_tokens`): user_id FK, jti unique, token_hash, created_at, expires_at, revoked, revoked_at, replaced_by_jti.
-- Plan (`plans`): name, code unique, price_cents, currency, billing_period, is_active, stripe_product_id, stripe_price_id, timestamps.
-- Subscription (`subscriptions`): user_id, plan_id, status, provider, provider_subscription_id unique, provider_customer_id, started_at, current_period_end, canceled_at, cancel_at_period_end.
-- Enums: Provider (google/github/local), SubscriptionStatus, BillingPeriod, PaymentStatus (unused), PaymentProvider (stripe/paymob/manual).
+## Billing & Subscription Domain
+- **Plans**: CRUD via `PlanService`/`PlanRepository`; plan tiers (`PlanTier`) stored on plans for feature gating; soft delete sets `is_active=False`. Stripe product/price is created/updated via `StripeGateway` and stored on the plan.
+- **Subscriptions**: `SubscriptionRepoistory` tracks access windows (`current_period_end`). New subscriptions start `PAST_DUE` until webhook confirmation. Duplicate active subs are blocked.
+- **Checkout & Upgrade**: `/billing/subscriptions/subscribe` and `/upgrade` create Stripe Checkout sessions with metadata (plan/user and optional `upgrade_from_subscription_id`). Customer is ensured/created before checkout.
+- **Cancellation**: `/billing/subscriptions/cancel` marks `cancel_at_period_end` and, for Stripe, modifies the subscription. Local record updated with `canceled_at`/period end.
+- **Payments**: `PaymentRepository` stores invoices (provider invoice id, amount, currency, status). Recorded on `invoice.payment_succeeded` webhooks.
 
-## API Overview
-Auth (`src/auth/router.py`):
-- POST `/register` – create user, send verification email (BackgroundTask); returns user.
-- POST `/login` – password login; sets `refresh_token` cookie; returns access token + user.
-- POST `/refresh-token` – rotate refresh; sets new cookie; returns access token.
-- GET `/verify` – verify email via validation token.
-- POST `/request/verify` – resend verification email.
-- POST `/forget-password` – send reset link (silent on unknown email).
-- POST `/new-password` – set new password via token.
-- POST `/change-password` – change password (auth required).
-- POST `/request/login-code` – send OTP code to email.
-- POST `/login/code` – OTP login; sets refresh cookie; returns tokens + user.
-- GET `/google/login` + `/auth/social/callback/google` – Google OAuth.
-- GET `/github/login` + `/auth/social/callback/github` – GitHub OAuth.
-- POST `/deactivate` – deactivate current user.
+## Stripe Integration & Webhooks
+- Webhook endpoint `/billing/stripe/webhook` verifies signature via `stripe.Webhook.construct_event`.
+- **Events handled**:
+  - `checkout.session.completed`: fetches Stripe subscription, handles upgrade (cancels old), and creates a local subscription.
+  - `invoice.payment_succeeded`: retrieves subscription, updates period start/end, records payment, and dispatches Celery email tasks (create vs renewal based on `billing_reason`).
+  - `customer.subscription.deleted`: cancels local subscription, setting `current_period_end` to now.
+  - `invoice.payment_failed`: marks subscription `PAST_DUE`.
+- Stripe metadata carries `plan_id`, `plan_code`, `user_id`, and upgrade source IDs for proper reconciliation.
 
-Billing (`src/billing/router.py`):
-- GET `/billing/plans` – list active plans.
-- POST `/billing/plans` – create plan (admin).
-- GET `/billing/plans/{plan_id}` – retrieve plan.
-- PATCH `/billing/plans/{plan_id}` – update plan (admin).
-- DELETE `/billing/plans/{plan_id}` – soft-delete plan (admin).
-- GET `/billing/subscriptions/me` – current subscription for user.
-- POST `/billing/subscriptions/subscribe` – start Stripe checkout for plan.
-- POST `/billing/subscriptions/cancel` – cancel at period end.
-- POST `/billing/subscriptions/upgrade` – upgrade via Stripe checkout.
-- POST `/billing/stripe/webhook` – Stripe webhook (rate-limit exempt).
+## Background Tasks (Celery)
+- Celery worker (`src.celery_app.celery_app`) and beat (`src.celery_app.beat_app`) use Redis URLs from env.
+- Tasks: `send_subscription_email_task` and `send_update_subscription_email_task` dispatch templated emails; `expire_subscriptions_task` (beat) cancels subscriptions whose `current_period_end` has passed.
+- Legacy placeholder `src/tasks.py:expire_subscriptions` prints a TODO and is unused by beat.
+- Sync DB engine (`SYNC_DATABASE_URL`) is used inside Celery tasks via `get_sync_session`.
 
-## Auth & Token Flow
-- Passwords hashed with Argon2 (`src/hashing.py`).
-- JWTs include `jti`, `exp`, `iat`; access/refresh/validation tokens via `src/jwt.py`.
-- Refresh tokens stored hashed; rotation revokes previous tokens (`src/utils.py`, `src/repository.py`).
-- Validation tokens for email verification/password reset (`VALIDATION_SECRET_KEY`).
-- Guards: active/non-active/admin dependencies in `src/auth_bearer.py`.
-- OAuth: state cookie protection; user auto-provision on first login.
-- OTP: hashed code stored with expiry; single-use delete on success.
+## Database Schema
+- **users**: id, email, username, password (nullable for social), admin/active/verified flags, provider, stripe_customer_id, timestamps; 1-1 profile, 1-many subscriptions and refresh tokens.
+- **profiles**: per-user names/image, timestamps; created alongside user.
+- **login_codes**: hashed OTPs with expiry per user.
+- **refresh_tokens**: hashed token with JTI, expiry, revoked flags, replacement JTI.
+- **plans**: name/code, price_cents, currency, billing_period, tier, is_active, Stripe product/price IDs, timestamps.
+- **subscriptions**: user/plan FKs, status, provider/provider IDs, period start/end, cancel flags/timestamps.
+- **payments**: subscription/user FKs, provider invoice id, amount/currency, status, provider enum; unique per provider/invoice id.
 
-## Billing/Subscription Flow
-- Plan CRUD via `PlanService`/`PlanRepository`; Stripe product/price created/updated when available.
-- Subscribe/upgrade: Stripe Checkout session; metadata stores plan/user/upgrade info; webhook creates/cancels/renews local subs.
-- Cancel: Stripe modify subscription when provider is Stripe; local sub marked cancel_at_period_end.
-- Renewals: `invoice.payment_succeeded` updates period; `customer.subscription.deleted` marks canceled.
-
-## Payments (Stripe)
-- API key from `STRIPE_SECRET_KEY`; webhook signature `STRIPE_WEBHOOK_SECRET`.
-- Customer creation on-demand; stored in `User.stripe_customer_id`.
-- Product/price IDs cached on Plan; new price created on pricing changes.
-- Operations run in threadpool to avoid blocking event loop.
-
-## Background Tasks / Workers
-- FastAPI BackgroundTasks for auth emails.
-- Celery worker: subscription email tasks (`send_subscription_email_task`, `send_update_subscription_email_task`).
-- Celery beat: hourly `expire_subscriptions_task` to cancel expired subs.
-- Placeholder `src/tasks.py:expire_subscriptions` remains TODO.
+## API Surface (High Level)
+- Auth: registration/login/refresh, email verification (request/verify), password reset/change, OTP login, Google/GitHub OAuth, deactivate account.
+- Billing: plans list/create/get/update/delete (admin for mutations); subscriptions me/subscribe/upgrade/cancel; payments me; Stripe webhook (rate-limit exempt).
+- Rate limiting: default 5/min per Authorization header or IP (`src/rate_limiter.py`).
 
 ## Error Handling
-- Custom validation handler returns `{errors: {field: msg}}` (422).
-- Consistent `HTTPException` usage with meaningful codes for auth/billing flows.
-- Refresh validation checks presence, revocation, jti, expiry.
+- Validation errors use `validation_exception_handler` to return `{"errors": {field: message}}` with 422 status.
+- Business rule violations raise `HTTPException` with descriptive messages and appropriate HTTP codes.
+- Stripe webhooks return error strings on signature/validation failures; otherwise return `True`.
 
-## Deployment Notes
-- Docker Compose: API (8000), Postgres (5432), Redis (6379), Celery worker/beat, pgAdmin (5050); project volume mounted.
-- Dockerfile: Python 3.12-slim, installs requirements, runs `uvicorn src.main:app --reload`.
-- Run migrations: `alembic upgrade head`.
-- CORS open; tighten for production.
-- Cookies `httponly`, `samesite=lax`; set `secure=True` in production.
+## Security
+- Passwords and OTP codes hashed with Argon2 (`src/hashing.py`).
+- JWTs include `jti`, `exp`, `iat`; refresh tokens stored hashed in DB and rotated on every refresh/login.
+- Cookies for refresh tokens are httpOnly, `samesite="lax"`; set `secure=True` in production.
+- OAuth state cookies defend against CSRF on social callbacks.
+- Rate limiting is enabled globally; webhook route is exempt.
+- CORS is wide open by default; restrict origins/headers/methods for production.
 
-## Testing
-- Pytest + pytest-asyncio; httpx AsyncClient with ASGITransport.
-- DB overrides to `TEST_DATABASE_URL`; rate limiter disabled in tests.
-- Auth tests cover register/login/refresh/password/OTP/OAuth; billing tests cover plans/subscriptions/webhooks.
+## Configuration & Environments
+- Settings loaded by `pydantic-settings` (`src/config.py`) from `.env`.
+- Provide distinct URLs for async API DB, sync Celery DB, and tests.
+- Logging configured via `src/logging.py` to stdout and `logs/app.log` with rotation.
 
-## Conventions / Gaps
-- Service + repository layering; blocking calls offloaded to threadpool.
-- Refresh tokens hashed + rotated per login/refresh.
-- Unimplemented: `ProfileService`, `ProfileReposiotry.get_by_user_id`, `src/tasks.expire_subscriptions` logic.
-- Empty stubs: `src/auth/constants.py`, `src/auth/config.py`, `src/auth/exceptions.py`, `src/billing/constants.py`, `src/billing/config.py`, `src/billing/exceptions.py`.
-- Unused enum entries: `PaymentStatus`, `PAYMOB` provider option.
+## Developer Workflow
+1. Install deps and create `.env` (see README).
+2. Run `alembic upgrade head` to create tables/seeds (plan seed migration exists under `alembic/versions`).
+3. Start services: `uvicorn src.main:app --reload`, Celery worker/beat, Postgres, and Redis.
+4. Develop features in service/repository layers; add/extend Pydantic schemas and tests.
+5. Run `pytest` before merging; mock Stripe/email where needed.
+
+## Testing Approach
+- Pytest with `pytest-asyncio`, httpx `AsyncClient` + `ASGITransport` hitting the FastAPI app directly.
+- DB setup/teardown uses `TEST_DATABASE_URL` and creates/drops schema per session (`tests/conftest.py`).
+- Rate limiter disabled in tests; Stripe and email interactions are monkeypatched in billing/auth tests.
+
+## Known Gaps / TODOs
+- `ProfileReposiotry.get_by_user_id` and `ProfileService` are stubs.
+- `src/tasks.py:expire_subscriptions` is unimplemented (beat uses `billing.tasks.expire_subscriptions_task` instead).
+- Placeholder modules for constants/config/exceptions exist under `src/auth` and `src/billing`.
+- Enum options `PAYMOB` and `PaymentStatus` states are defined but not fully wired.
